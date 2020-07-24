@@ -251,6 +251,12 @@ class Parser:
             raise SyntaxError("at " + repr(text[cursor:]))
         return [self.prune_tree(tree) for tree in forest]
 
+    def can_parse(self, text):
+        cursor, forest = self.parse_prefix(text)
+        if cursor < len(text):
+            return False
+        return True
+
     def parse_on(self, text, start_symbol):
         old_start = self._start_symbol
         try:
