@@ -1,6 +1,7 @@
 from Parser import EarleyParser as Parser
 import sys
 import json
+import os
 
 def main(grammar, bug_fn, predicate):
     input_file = './results/%s.log.json' % os.path.basename(bug_fn)
