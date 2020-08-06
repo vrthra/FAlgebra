@@ -1,11 +1,7 @@
 import Infra as I
 from Abstract import PRes
 
-times = 0
-
 def my_predicate(src):
-    global times
-    times += 1
     o = I.do('rhino', 'java -jar ./lang/js/compilers/rhino-1.7.7.2.jar', src)
     if o.returncode == 0: return PRes.failed
     out = o.stdout
@@ -22,4 +18,3 @@ def my_predicate(src):
 import sys
 if __name__ == '__main__':
     I.main('./lang/js/grammar/javascript.fbjson', './lang/js/bugs/rhino.385.js', my_predicate)
-    print('Num times:', times, file=sys.stderr)
