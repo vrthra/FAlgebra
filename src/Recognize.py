@@ -2,12 +2,17 @@ from Parser import EarleyParser as Parser
 import sys
 import json
 
-def main(input_file, grammar_file):
-    with open(grammar_file) as f:
-        meta_g = json.loads(f.read())
-    grammar = meta_g['[grammar]']
-    start = meta_g['[start]']
-    p = Parser(grammar, start_symbol=start, canonical=True)
+def main(grammar, bug_fn, predicate):
+    results/rhino.385.js.log.json results/rhino.385.js_atleast_one_fault_g.json
+
+    input_file = './results/%s.log.json' % os.path.basename(bug_fn)
+    one_fault_grammar_file = './results/%s_atleast_one_fault_g.json' % os.path.basename(bug_fn)
+
+    with open(one_fault_grammar_file) as f:
+        one_fault_meta_g = json.loads(f.read())
+    one_fault_grammar = one_fault_meta_g['[grammar]']
+    one_fault_start = one_fault_meta_g['[start]']
+    p = Parser(one_fault_grammar, start_symbol=one_fault_start, canonical=True)
     success_count_total = 0
     success_count_neg = 0
     fail_count_total = 0
