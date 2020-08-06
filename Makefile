@@ -1,6 +1,6 @@
 python=python3
 
-clean: ; rm -rf *.reduce.log *.fuzz.log results fuzzing
+clean: ; rm -rf *.reduce.log *.fuzz.log results fuzzing *.recognize.log
 clobber: clean;
 	-$(MAKE) box-remove
 	-rm -rf artifact artifact.tar.gz
@@ -25,13 +25,14 @@ rhino_results_src=$(addsuffix .log,$(addprefix results/reduce_rhino_,$(rhino_bug
 clojure_results_src=$(addsuffix .log,$(addprefix results/reduce_clojure_,$(clojure_bugs)))
 closure_results_src=$(addsuffix .log,$(addprefix results/reduce_closure_,$(closure_bugs)))
 
-fuzz_find_results_src=$(addsuffix .log,$(addprefix results/fuzz_find_,$(find_bugs)))
-fuzz_grep_results_src=$(addsuffix .log,$(addprefix results/fuzz_grep_,$(grep_bugs)))
+recognize_find_results_src=$(addsuffix .log,$(addprefix results/recognize_find_,$(find_bugs)))
+recognize_grep_results_src=$(addsuffix .log,$(addprefix results/recognize_grep_,$(grep_bugs)))
 
-fuzz_lua_results_src=$(addsuffix .log,$(addprefix results/fuzz_lua_,$(lua_bugs)))
-fuzz_rhino_results_src=$(addsuffix .log,$(addprefix results/fuzz_rhino_,$(rhino_bugs)))
-fuzz_closure_results_src=$(addsuffix .log,$(addprefix results/fuzz_closure_,$(closure_bugs)))
-fuzz_clojure_results_src=$(addsuffix .log,$(addprefix results/fuzz_clojure_,$(clojure_bugs)))
+recognize_lua_results_src=$(addsuffix .log,$(addprefix results/recognize_lua_,$(lua_bugs)))
+recognize_rhino_results_src=$(addsuffix .log,$(addprefix results/recognize_rhino_,$(rhino_bugs)))
+recognize_closure_results_src=$(addsuffix .log,$(addprefix results/recognize_closure_,$(closure_bugs)))
+recognize_clojure_results_src=$(addsuffix .log,$(addprefix results/recognize_clojure_,$(clojure_bugs)))
+
 
 start_%:; @echo done
 stop_%:; @echo done
@@ -67,13 +68,16 @@ results/reduce_%.log: src/%.py | results
 	@- $(MAKE) stop_$(subst grep_,,$*)
 	mv $@_ $@
 
-results/fuzz_%.log: src/fuzz_%.py results/reduce_%.log
+
+results/recognize_%.log: src/recognize_%.py results/reduce_%.log
 	@- $(MAKE) start_$(subst find_,,$*)
 	@- $(MAKE) start_$(subst grep_,,$*)
 	time $(python) $< 2>&1 | $(unbuffer) tee $@_
 	@- $(MAKE) stop_$(subst find_,,$*)
 	@- $(MAKE) stop_$(subst grep_,,$*)
 	mv $@_ $@
+
+
 
 reduce_find: $(find_results_src); @echo done
 reduce_grep: $(grep_results_src); @echo done
@@ -83,36 +87,36 @@ reduce_rhino: $(rhino_results_src); @echo done
 reduce_clojure: $(clojure_results_src); @echo done
 reduce_closure: $(closure_results_src); @echo done
 
-fuzz_find: $(fuzz_find_results_src); @echo done
-fuzz_grep: $(fuzz_grep_results_src); @echo done
+recognize_find: $(recognize_find_results_src); @echo done
+recognize_grep: $(recognize_grep_results_src); @echo done
 
-fuzz_lua: $(fuzz_lua_results_src); @echo done
-fuzz_rhino: $(fuzz_rhino_results_src); @echo done
-fuzz_clojure: $(fuzz_clojure_results_src); @echo done
-fuzz_closure: $(fuzz_closure_results_src); @echo done
+recognize_lua: $(recognize_lua_results_src); @echo done
+recognize_rhino: $(recognize_rhino_results_src); @echo done
+recognize_clojure: $(recognize_clojure_results_src); @echo done
+recognize_closure: $(recognize_closure_results_src); @echo done
 
 
-all_find: fuzz_find
+all_find: recognize_find
 	tar -cf find.tar results .db
 	@echo find done
 
-all_grep: fuzz_grep
+all_grep: recognize_grep
 	tar -cf grep.tar results .db
 	@echo grep done
 
-all_lua: fuzz_lua
+all_lua: recognize_lua
 	tar -cf lua.tar results .db
 	@echo lua done
 
-all_rhino: fuzz_rhino
+all_rhino: recognize_rhino
 	tar -cf rhino.tar results .db
 	@echo rhino done
 
-all_clojure: fuzz_clojure
+all_clojure: recognize_clojure
 	tar -cf clojure.tar results .db
 	@echo clojure done
 
-all_closure: fuzz_closure
+all_closure: recognize_closure
 	tar -cf closure.tar results .db
 	@echo closure done
 
