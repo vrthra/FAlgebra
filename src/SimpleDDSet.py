@@ -1,10 +1,21 @@
 import heapq
-import re
 from enum import Enum
 from Parser import EarleyParser as Parser
 from Fuzzer import LimitFuzzer as LimitFuzzer
 import random
-MAX_TRIES_FOR_ABSTRACTION = 100
+import sys
+sys.setrecursionlimit(9000)
+
+# The idea here is either try MAX_LIMIT number of tries
+# for a counter example, or give up after `MAX_CHECKS`
+# valid reproductions.
+MAX_LIMIT=1000
+FIND_COUNTER_EXAMPLE = True
+MIN_EXAMPLES = 1
+LOG = True
+KEY = '()'
+NAME = None
+
 
 class PRes(str, Enum):
     success = 'SUCCESS'
@@ -147,27 +158,54 @@ def reduction(tree, grammar, predicate):
 
 #=======================GENERALIZER=============================================
 
-def generalize(tree, path, known_paths, grammar, predicate):
+def generalize(tree, path, known_paths, grammar, predicate, max_checks, log=False):
     node = get_child(tree, path)
+    if log:
+        print('==>', node[0])
     if not is_nt(node[0]): return known_paths
-    if can_abstract(tree, path, known_paths, grammar, predicate):
+    if can_generalize(tree, path, known_paths, grammar, predicate, max_checks, log):
         known_paths.append(path)
         return known_paths
     for i,child in enumerate(node[1]):
-        ps = generalize(tree, path + [i], known_paths, grammar, predicate)
+        ps = generalize(tree, path + [i], known_paths, grammar, predicate, max_checks, log)
     return known_paths
 
-def can_abstract(tree, path, known_paths, grammar, predicate):
-    i = 0
-    while (i < MAX_TRIES_FOR_ABSTRACTION):
-        t = replace_all_paths_with_generated_values(tree, known_paths + [path], grammar)
-        s = tree_to_str(t)
-        if predicate(s) == PRes.failed:
-            return False
-        elif predicate(s) == PRes.invalid:
-            continue
-        i += 1
-    return True
+def can_generalize(tree, path, known_paths, grammar, predicate, max_checks, log=False):
+    checks = 0
+    limit = 0
+    abstract = True
+    rstr = None
+    checks = set()
+    node = get_child(tree, path)
+    while len(checks) < max_checks:
+        limit += 1
+        if limit >= MAX_LIMIT:
+            # giveup.
+            if FIND_COUNTER_EXAMPLE:
+                if len(checks) > MIN_EXAMPLES:
+                    abstract = True
+                else:
+                    abstract = False
+            else:
+                abstract = False
+
+            print('warn: giving up', node[0], 'after', MAX_LIMIT,
+                    'and no counterexample found.'
+                    'invalid values with', len(checks),
+                    'valid values abstract:', abstract)
+            break
+        rtree = replace_all_paths_with_generated_values(tree, known_paths + [path], grammar)
+        rstr = tree_to_str(rtree)
+        pres = predicate(rstr)
+        if pres == PRes.failed:
+            abstract = False
+            break
+        else:
+            if pres == PRes.success:
+                checks.add(rstr)
+            else:
+                continue
+    return abstract
 
 def replace_all_paths_with_generated_values(tree, paths, grammar):
     my_tree = tree
@@ -235,4 +273,24 @@ def generate_testcase(abstract_tree, grammar):
     tv = abstract_to_concrete(abstract_tree, grammar)
     s = tree_to_str(tv)
     return s
+
+
+def ddset_simple(reduced_tree, grammar, predicate, max_checks, log=False):
+    vals = generalize(reduced_tree, [], [], grammar, predicate, max_checks, log)
+    ta = get_abstract_tree(reduced_tree, vals)
+    return ta
+
+
+def get_abstraction(grammar_, my_input, predicate, max_checks=100):
+    start = grammar_.get('[start]', '<start>')
+    grammar = grammar_['[grammar]']
+    assert start in grammar
+    assert predicate(my_input) == PRes.success
+    d_tree, *_ = Parser(grammar, start_symbol=start, canonical=True).parse(my_input)
+    min_tree = reduction(d_tree, grammar, predicate)
+    min_s = tree_to_str(min_tree)
+
+    dd_tree =  ddset_simple(min_tree, grammar, predicate, max_checks, log=True)
+    s = tree_to_str_a(dd_tree)
+    return min_s, s, dd_tree
 
