@@ -30,8 +30,5 @@ def main(input_file, grammar_file):
                 fail_count_neg += 1
         else:
             assert False
-    print('success:', (success_count_total - success_count_neg),  '/', success_count_total)
-    print('fail:', (fail_count_total - fail_count_neg),  '/', fail_count_total)
-
-
-main(*sys.argv[1:])
+    print('Success: %d/%d' % ((success_count_total - success_count_neg), success_count_total))
+    print('Fail: %d/%d' % ((fail_count_total - fail_count_neg), fail_count_total))
