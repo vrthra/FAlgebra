@@ -3,8 +3,6 @@ import sys
 import json
 
 def main(grammar, bug_fn, predicate):
-    results/rhino.385.js.log.json results/rhino.385.js_atleast_one_fault_g.json
-
     input_file = './results/%s.log.json' % os.path.basename(bug_fn)
     one_fault_grammar_file = './results/%s_atleast_one_fault_g.json' % os.path.basename(bug_fn)
 
