@@ -849,10 +849,23 @@ def mark_abstract_nodes(tree, paths):
     return mark_concrete_r(tree)
 
 def find_charecterizing_node(tree):
-   name, children, gen = tree
+   name, children, *gen = tree
    if len(children) == 1:
        return find_charecterizing_node(children[0])
-   return tree
+   # trim out children that are empty from the beginning
+   # and end
+   non_empty = []
+   for c in children:
+       if not is_nt(c[0]):
+           # have a terminal. So, the parent node is charecterizing.
+           return tree
+       if tree_to_str(c):
+           non_empty.append(c)
+   assert non_empty, 'fault node should have at least one non-empty child'
+   if len(non_empty) > 1:
+       return tree
+   else:
+       return find_charecterizing_node(non_empty[0])
 
 def mark_faulty_name(symbol, prefix, v):
    return '<%s L%s_%s>'% (symbol[1:-1], prefix, v)
