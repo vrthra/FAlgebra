@@ -2,7 +2,10 @@ import random
 
 class Fuzzer:
     def __init__(self, grammar):
-        self.grammar = grammar
+        self.grammar = self.clean(grammar)
+
+    def clean(self, g):
+        return {k:[[t for t in r if t] for r in g[k]] for k in g}
 
     def fuzz(self, key='<start>', max_num=None, max_depth=None):
         raise NotImplemented()
@@ -97,9 +100,9 @@ class LimitFuzzer(Fuzzer):
 
 
     def __init__(self, grammar):
-        super().__init__(grammar)
+        super().__init__(self.clean(grammar))
         self.key_cost = {}
-        self.cost = self.compute_cost(grammar)
+        self.cost = self.compute_cost(self.clean(grammar))
 
     def compute_cost(self, grammar):
         cost = {}
