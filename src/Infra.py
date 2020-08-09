@@ -76,6 +76,10 @@ def save(name):
     with open(fname, 'w+') as f:
         json.dump(g_predicate, fp=f)
 
+def clean_grammar(g_):
+    g, s = g_['[grammar]'], g_['[start]']
+    return {'[start]': s, '[grammar]': {k: [[t for t in r if t] for r in g[k]] for k in g}}
+
 def main(gf_fbjson, bug_fn, pred, results_dir='results', max_checks=A.MAX_CHECKS):
     global DOCKER
     DOCKER = bug_fn.split('.')[-1]
@@ -92,7 +96,7 @@ def main(gf_fbjson, bug_fn, pred, results_dir='results', max_checks=A.MAX_CHECKS
     assert _predicate(A.tree_to_string(tree)) == A.PRes.success
     #assert _predicate('') == A.PRes.failed
 
-    min_s, abs_s, a_mintree = S.get_abstraction(meta,
+    min_s, abs_s, a_mintree = S.get_abstraction(clean_grammar(meta),
                                A.tree_to_string(tree),
                                _predicate,
                                max_checks)

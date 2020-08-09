@@ -859,8 +859,12 @@ def find_charecterizing_node(tree):
        if not is_nt(c[0]):
            # have a terminal. So, the parent node is charecterizing.
            return tree
-       if tree_to_str(c):
+       elif is_node_abstract(c):
+           continue
+       elif tree_to_str(c):
            non_empty.append(c)
+       else:
+           continue # empty
    assert non_empty, 'fault node should have at least one non-empty child'
    if len(non_empty) > 1:
        return tree
