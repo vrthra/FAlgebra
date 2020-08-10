@@ -1,5 +1,12 @@
 import sys
 import string
+
+# how to compute the charecterizing node. Should we consider the abstract nodes
+# when computing applicable children? i.e [<a*> <b> <c*>] where <a*> and <c*>
+# are abstract, should we recurse into <b> to determine the charecterizing node?
+# setting this false does not skip.
+SKIP_ABSTRACT_NODE = False
+
 BEXPR_GRAMMAR = {
     '<start>': [['<bexpr>']],
     '<bexpr>': [
@@ -859,7 +866,7 @@ def find_charecterizing_node(tree):
        if not is_nt(c[0]):
            # have a terminal. So, the parent node is charecterizing.
            return tree
-       elif is_node_abstract(c):
+       elif is_node_abstract(c) and SKIP_ABSTRACT_NODE:
            continue
        elif tree_to_str(c):
            non_empty.append(c)
