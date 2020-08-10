@@ -155,11 +155,15 @@ class LimitFuzzer(Fuzzer):
     def fuzz(self, key='<start>', max_depth=10):
         return self.gen_key(key=key, depth=0, max_depth=max_depth)
 
+    def reset_cost(self):
+        global COST
+        COST.clear()
+
     def __init__(self, grammar):
         global COST
         super().__init__(grammar)
         self.key_cost = {}
-        if COST is not None:
+        if COST:
             self.cost = COST
         else:
             COST = self.compute_cost(grammar)

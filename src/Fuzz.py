@@ -47,6 +47,7 @@ def fuzz_grammar(mgrammar):
     for i in range(MAX_LIMIT):
         e = gf.fuzz(key=start, max_depth=1)
         results.append(e)
+    gf.reset_cost()
     return list(set(results))
 
 def fuzz_tree(mgrammar, tree):
@@ -78,7 +79,6 @@ def fuzz_tree(mgrammar, tree):
             res = A.replace_path2(tree, abs_path, (name, [(e, [])]))
             results.append(A.tree_to_string(res))
     return list(set(results))
-
 
 def fuzz_it(fname):
     with open(fname) as f:
