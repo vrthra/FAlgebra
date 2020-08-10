@@ -1570,7 +1570,8 @@ def complete(grammar, start, log=False):
     for key in keys:
         if key not in reachable_keys[start]: continue
         grammar = reconstruct_key(key, grammar, log)
-    return grammar
+    grammar_, start_ = grammar_gc(grammar, start)
+    return grammar_
 
 import itertools as I
 
