@@ -25,6 +25,9 @@ rhino_results_src=$(addsuffix .log,$(addprefix results/reduce_rhino_,$(rhino_bug
 clojure_results_src=$(addsuffix .log,$(addprefix results/reduce_clojure_,$(clojure_bugs)))
 closure_results_src=$(addsuffix .log,$(addprefix results/reduce_closure_,$(closure_bugs)))
 
+fuzz_find_results_src=$(addsuffix .log,$(addprefix results/fuzz_find_,$(find_bugs)))
+fuzz_grep_results_src=$(addsuffix .log,$(addprefix results/fuzz_grep_,$(grep_bugs)))
+
 recognize_find_results_src=$(addsuffix .log,$(addprefix results/recognize_find_,$(find_bugs)))
 recognize_grep_results_src=$(addsuffix .log,$(addprefix results/recognize_grep_,$(grep_bugs)))
 
@@ -69,6 +72,15 @@ results/reduce_%.log: src/%.py | results
 	mv $@_ $@
 
 
+results/fuzz_%.log: src/fuzz_%.py results/reduce_%.log
+	@- $(MAKE) start_$(subst find_,,$*)
+	@- $(MAKE) start_$(subst grep_,,$*)
+	time $(python) $< 2>&1 | $(unbuffer) tee $@_
+	@- $(MAKE) stop_$(subst find_,,$*)
+	@- $(MAKE) stop_$(subst grep_,,$*)
+	mv $@_ $@
+
+
 results/recognize_%.log: src/recognize_%.py results/reduce_%.log
 	@- $(MAKE) start_$(subst find_,,$*)
 	@- $(MAKE) start_$(subst grep_,,$*)
@@ -90,17 +102,21 @@ reduce_closure: $(closure_results_src); @echo done
 recognize_find: $(recognize_find_results_src); @echo done
 recognize_grep: $(recognize_grep_results_src); @echo done
 
+fuzz_find: $(fuzz_find_results_src); @echo done
+fuzz_grep: $(fuzz_grep_results_src); @echo done
+
+
 recognize_lua: $(recognize_lua_results_src); @echo done
 recognize_rhino: $(recognize_rhino_results_src); @echo done
 recognize_clojure: $(recognize_clojure_results_src); @echo done
 recognize_closure: $(recognize_closure_results_src); @echo done
 
 
-all_find: recognize_find
+all_find: recognize_find fuzz_find
 	tar -cf find.tar results .db
 	@echo find done
 
-all_grep: recognize_grep
+all_grep: recognize_grep fuzz_grep
 	tar -cf grep.tar results .db
 	@echo grep done
 
