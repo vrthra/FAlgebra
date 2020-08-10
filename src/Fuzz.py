@@ -80,6 +80,24 @@ def fuzz_tree(mgrammar, tree):
     return list(set(results))
 
 
+def fuzz_it(fname):
+    with open(fname) as f:
+        w = f.read()
+        bug_grammar = json.loads(w)
+
+    # fuzz_vals = fuzz_tree(meta, abs_t)
+    fuzz_vals = fuzz_grammar(bug_grammar)
+    FUZZ_LIMIT = 10000
+    if len(fuzz_vals) > FUZZ_LIMIT:
+        fuzz_vals = random.sample(fuzz_vals, FUZZ_LIMIT)
+    print(len(fuzz_vals))
+    results = []
+    for f in fuzz_vals:
+        r = I._predicate(f)
+        print(r, repr(f))
+        results.append(r)
+    return results
+
 def main(gf_fbjson, bug_fn, pred, results_dir='fuzzing', max_checks=A.MAX_CHECKS):
     I.DOCKER = bug_fn.split('.')[-1]
     meta, tree, name = I.load_grammar(gf_fbjson, bug_fn, pred)
@@ -100,23 +118,24 @@ def main(gf_fbjson, bug_fn, pred, results_dir='fuzzing', max_checks=A.MAX_CHECKS
         abs_s = j['abs_s']
         abs_t = j['abs_t']
 
-    with open('./results/%s_atleast_one_fault_g.json' % os.path.basename(bug_fn)) as f:
-        w = f.read()
-        bug_grammar = json.loads(w)
+    results = fuzz_it('./results/%s_atleast_one_fault_g.json' % os.path.basename(bug_fn))
+    print('Atleast Total:', len(results))
+    print('Atleast Valid:', len([r for r in  results if r != A.PRes.invalid]))
+    print('Atleast Success:', len([r for r in  results if r == A.PRes.success]))
 
-    # fuzz_vals = fuzz_tree(meta, abs_t)
-    fuzz_vals = fuzz_grammar(bug_grammar)
-    FUZZ_LIMIT = 10000
-    if len(fuzz_vals) > FUZZ_LIMIT:
-        fuzz_vals = random.sample(fuzz_vals, FUZZ_LIMIT)
-    print(len(fuzz_vals))
-    results = []
-    for f in fuzz_vals:
-        r = I._predicate(f)
-        print(r, repr(f))
-        results.append(r)
 
-    print('Total:', len(results))
-    print('Valid:', len([r for r in  results if r != A.PRes.invalid]))
-    print('Success:', len([r for r in  results if r == A.PRes.success]))
+    results = fuzz_it('./results/%s_atmost_one_fault_g.json' % os.path.basename(bug_fn))
+    print('Atmost Total:', len(results))
+    print('Atmost Valid:', len([r for r in  results if r != A.PRes.invalid]))
+    print('Atmost Success:', len([r for r in  results if r == A.PRes.success]))
+
+    results = fuzz_it('./results/%s_exactly_one_fault_g.json' % os.path.basename(bug_fn))
+    print('Exactly Total:', len(results))
+    print('Exactly Valid:', len([r for r in  results if r != A.PRes.invalid]))
+    print('Exactly Success:', len([r for r in  results if r == A.PRes.success]))
+
+    results = fuzz_it('./results/%s_no_fault_g.json' % os.path.basename(bug_fn))
+    print('NoFault Total:', len(results))
+    print('NoFault Valid:', len([r for r in  results if r != A.PRes.invalid]))
+    print('NoFault Success:', len([r for r in  results if r == A.PRes.success]))
 
