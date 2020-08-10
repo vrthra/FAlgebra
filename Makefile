@@ -188,8 +188,8 @@ box-add: falgebra.box
 	cd vtest && vagrant up
 
 box-status:
-	vagrant global-status | grep falgebra
-	vagrant box list | grep falgebra
+	-vagrant global-status | grep falgebra
+	-vagrant box list | grep falgebra
 
 box-remove:
 	-vagrant destroy $$(vagrant global-status | grep falgebra | sed -e 's# .*##g')
