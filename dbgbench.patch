@@ -1,0 +1,60 @@
+diff --git a/docker/find.id b/docker/find.id
+index 7d0c438..77fe2c8 100755
+--- a/docker/find.id
++++ b/docker/find.id
+@@ -1 +1 @@
+-sudo docker ps --filter ancestor=ddset/find --format 'table {{.Image}} {{.ID}} {{.Names}}'
++sudo docker ps --filter ancestor=falgebra/find --format 'table {{.Image}} {{.ID}} {{.Names}}'
+diff --git a/docker/grep.id b/docker/grep.id
+index 6013030..0bf38b1 100755
+--- a/docker/grep.id
++++ b/docker/grep.id
+@@ -1 +1 @@
+-sudo docker ps --filter ancestor=ddset/grep --format 'table {{.Image}} {{.ID}} {{.Names}}'
++sudo docker ps --filter ancestor=falgebra/grep --format 'table {{.Image}} {{.ID}} {{.Names}}'
+diff --git a/docker/run.sh b/docker/run.sh
+index d1aadcb..5c4559c 100755
+--- a/docker/run.sh
++++ b/docker/run.sh
+@@ -14,9 +14,9 @@ if [ $(docker images | grep -c "CREATED") -eq 0 ]; then
+   echo "Run boot2docker to set up docker environment."
+   exit 1
+ fi
+-if [ $(docker images | grep -c "ddset/$subject ") -eq 0 ]; then
++if [ $(docker images | grep -c "falgebra/$subject ") -eq 0 ]; then
+   echo "Installing image.. This will be done only once and may take up to one hour."
+-  docker build -t ddset/$subject -f scripts/docker.$subject . || exit 1
++  docker build -t falgebra/$subject -f scripts/docker.$subject . || exit 1
+ fi
+ 
+ exit_code=0
+@@ -26,16 +26,16 @@ if [ $(docker ps | grep -c "$name") -ne 0 ]; then
+   exit 0
+ fi
+ 
+-#if [ $(docker ps | grep -c "ddset/$subject ") -ne 0 ]; then
+-#  echo "An instance of 'ddset' is already running ($(docker ps | grep "ddset/$subject " | cut -c-12))"
++#if [ $(docker ps | grep -c "falgebra/$subject ") -ne 0 ]; then
++#  echo "An instance of 'falgebra' is already running ($(docker ps | grep "falgebra/$subject " | cut -c-12))"
+ #  echo "You can use VNCViewer from your Desktop or a different terminal window to access: "
+ #  echo "$(docker inspect --format '{{ .NetworkSettings.IPAddress }}' ${name}):5900 (password: corebench)"
+ #  echo ""
+ #  echo "Connecting .."
+ #  if [ -z "$2" ]; then
+-#    docker exec -it $(docker ps | grep "ddset/$subject " | cut -c-12) bash
++#    docker exec -it $(docker ps | grep "falgebra/$subject " | cut -c-12) bash
+ #  else
+-#    echo "$2" | docker exec -i $(docker ps | grep "ddset/$subject " | cut -c-12) bash
++#    echo "$2" | docker exec -i $(docker ps | grep "falgebra/$subject " | cut -c-12) bash
+ #    exit_code=$?
+ #  fi
+ #
+@@ -43,7 +43,7 @@ fi
+ #fi
+ 
+ printf "Running container: "
+-docker run -dt --name ${name} -v $(pwd):/shared --dns 8.8.8.8 --dns 8.8.4.4 ddset/${subject} | cut -c-12
++docker run -dt --name ${name} -v $(pwd):/shared --dns 8.8.8.8 --dns 8.8.4.4 falgebra/${subject} | cut -c-12
+ echo "Now use VNCViewer from your Desktop or a different terminal window to access: "
+ echo "$(docker inspect --format '{{ .NetworkSettings.IPAddress }}' ${name}):5900 (password: corebench)"
+ echo
