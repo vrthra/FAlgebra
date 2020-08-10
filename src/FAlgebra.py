@@ -573,6 +573,8 @@ def convert_sympy_to_bexpr(sexpr, log=False):
         assert False
 
 def bexpr_parse(k):
+    bexpr_parser = Parser(BEXPR_GRAMMAR, canonical=True, start_symbol=BEXPR_START)
+    bparse_tree = list(bexpr_parser.parse(k))[0]
     bexpr = bparse_tree[1][0]
     return bexpr
 
