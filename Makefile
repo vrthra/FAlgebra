@@ -128,6 +128,7 @@ dbgbench-init: .dbgbench init-find init-grep
 
 .dbgbench:
 	git clone https://github.com/vrthra-forks/dbgbench.github.io.git
+	cat dbgbench.patch | (cd dbgbench.github.io/; patch -p1)
 	touch $@
 
 dbgbench-clobber:
