@@ -960,8 +960,9 @@ def insert_atleast_one_fault_into_grammar(grammar, fsym, prefix_f, reachable):
         fk, rules = insert_atleast_one_fault_into_key(grammar, key, fsym, prefix_f, reachable)
         if fk not in new_grammar:
             new_grammar[fk] = []
-        if not rules:
-            rules = grammar[key] # no applicable rules, so use the original
+        #if not rules:
+        #    rules = grammar[key] # no applicable rules, so use the original
+        # with <key +F1> we assert there is a fault here.
         new_grammar[fk].extend(rules)
     return new_grammar
 
