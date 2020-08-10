@@ -1789,6 +1789,7 @@ def negate_definition(refined_rules, base_rules, log):
             continue
         
         neg_rulesB, refs1 = negate_ruleset(refined_rules_p, log)
+        new_refs.extend(refs1)
         if log: print('negate_ruleset:', len(neg_rulesB))
  
         # TODO: Now, the idea is to do a `product` of each item in
@@ -1805,7 +1806,7 @@ def negate_definition(refined_rules, base_rules, log):
             new_refs.extend(ref)
         
     # now, include the unmatching base rules, and append.
-    return new_rulesB, refs1 + new_refs
+    return new_rulesB, new_refs
 
 def negate_grammar_(refined_grammar, refined_start, base_grammar, base_start, log=False):
     fault_key = refined_start
