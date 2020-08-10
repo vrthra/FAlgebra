@@ -912,7 +912,7 @@ def get_reachable_positions(rule, fkey, reachable):
     positions = []
     for i, token in enumerate(rule):
         if not is_nt(token): continue
-        if fkey in reachable[token]:
+        if fkey == token or fkey in reachable[token]:
             positions.append(i)
     return positions
 
