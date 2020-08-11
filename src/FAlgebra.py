@@ -604,17 +604,26 @@ class BExpr:
         else:
             operator = get_op(children[0])
             if operator == 'and':
-                res = self._flatten(children[2])
+                if children[2][0] == '<bexprs>':
+                    res = self._flatten(children[2])
+                else:
+                    res = [children[2]]
                 sp = [self._convert_to_sympy(a, symargs) for a in res]
                 return sympy.And(*[a for a,_ in sp]), symargs
 
             elif operator == 'or':
-                res = self._flatten(children[2])
+                if children[2][0] == '<bexprs>':
+                    res = self._flatten(children[2])
+                else:
+                    res = [children[2]]
                 sp = [self._convert_to_sympy(a, symargs) for a in res]
                 return sympy.Or(*[a for a,_ in sp]), symargs
 
             elif operator == 'neg':
-                res = self._flatten(children[2])
+                if children[2][0] == '<bexprs>':
+                    res = self._flatten(children[2])
+                else:
+                    res = [children[2]]
                 assert len(res) == 1
                 a,_ = self._convert_to_sympy(res[0], symargs)
                 return sympy.Not(a), symargs
@@ -1462,6 +1471,17 @@ def reconstruct_neg_fault(grammar, key, bexpr):
     return g, f_key, undefined_keys(g)
 
 
+def reconstruct_neg_neg_bexpr(grammar, key, bexpr):
+    g = copy_grammar(grammar)
+    nn_key = bexpr.with_key(key)
+    assert nn_key not in grammar
+    n_key = negate_key(nn_key)
+    assert n_key in grammar
+    base_grammar, base_start = normalize_grammar(grammar), normalize(key)
+    rules, refs = negate_definition(grammar[n_key], base_grammar[base_start], False)
+    g[nn_key] = rules
+    return g, nn_key, undefined_keys(g)
+
 def reconstruct_neg_bexpr(grammar, key, bexpr):
     fst = bexpr.op_fst()
     base_grammar, base_start = normalize_grammar(grammar), normalize(key)
@@ -1525,6 +1545,9 @@ def reconstruct_rules_from_bexpr(key, bexpr, grammar):
             return reconstruct_or_bexpr(grammar, key, bexpr)
         elif operator == 'neg':
             return reconstruct_neg_bexpr(grammar, key, bexpr)
+        elif operator == '':
+            # probably we have a negation
+            return reconstruct_neg_neg_bexpr(grammar, key, bexpr)
         else:
             assert False
 
