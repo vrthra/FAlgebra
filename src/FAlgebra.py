@@ -1583,7 +1583,7 @@ def complete(grammar, start, log=False):
         if key not in reachable_keys[start]: continue
         grammar = reconstruct_key(key, grammar, log)
     grammar_, start_ = grammar_gc(grammar, start)
-    return _grammar
+    return grammar_
 
 import itertools as I
 
