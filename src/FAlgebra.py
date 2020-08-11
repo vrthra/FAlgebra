@@ -131,10 +131,10 @@ class LimitFuzzer(Fuzzer):
     def fuzz(self, key='<start>', max_depth=10):
         self._s = self.iter_gen_key(key=key, max_depth=max_depth)
         return self.tree_to_str(self._s)
-   
+
     def is_nt(self, name):
         return (name[0], name[-1]) == ('<', '>')
- 
+
     def tree_to_str(self, tree):
         name, children = tree
         if not self.is_nt(name): return name
@@ -201,7 +201,7 @@ def is_nullable(grammar, start):
     return start in nullable_nt(grammar)
 
 def remove_all_terminals(grammar):
-    return {k:[[t for t in r if is_nt(t)] for r in grammar[k]] for k in grammar} 
+    return {k:[[t for t in r if is_nt(t)] for r in grammar[k]] for k in grammar}
 
 def is_cfg_empty(grammar, start):
     # first remove all terminals
@@ -325,7 +325,7 @@ def validate_tree(tree, grammar):
         return [a[0] for a in arr]
     name, children, *rest = tree
     if not is_nt(name): return True
-    
+
     seen = False
     for rule in grammar[name]:
         if keys(children) == rule:
@@ -477,31 +477,11 @@ def reachable_dict(grammar):
 import sympy
 
 class OrB:
-    def __init__(self, a, b): 
-        if b is None:
-            assert isinstance(a, list)
-            if a[1:]:
-                self.a, self.b = a[0], OrB(a[1:], None)
-            else:
-                self.a, self.b = a[0], None 
-        else:       
-            self.a, self.b = a, b
-    def __str__(self):
-        if self.b is None: return str(self.a)
-        return 'or(%s,%s)' % (str(self.a), str(self.b))
+    def __init__(self, a): self.l = a
+    def __str__(self): return 'or(%s)' % ','.join(sorted([str(s) for s in self.l]))
 class AndB:
-    def __init__(self, a, b):
-        if b is None:
-            assert isinstance(a, list)
-            if a[1:]:
-                self.a, self.b = a[0], AndB(a[1:], None)
-            else:
-                self.a, self.b = a[0], None 
-        else:
-            self.a, self.b = a, b
-    def __str__(self):
-        if self.b is None: return str(self.a)
-        return 'and(%s,%s)' % (str(self.a), str(self.b))
+    def __init__(self, a): self.l = a
+    def __str__(self): return 'and(%s)' % ','.join(sorted([str(s) for s in self.l]))
 class NegB:
     def __init__(self, a): self.a = a
     def __str__(self): return 'neg(%s)' % str(self.a)
@@ -509,113 +489,183 @@ class B:
     def __init__(self, a): self.a = a
     def __str__(self): return str(self.a)
 
-def convert_to_sympy(bexpr, symargs=None):
-    def get_op(node):
-        assert node[0] == '<bop>'
-        return node[1][0][0]
-    if symargs is None:
-        symargs = {}
-    name, children = bexpr
-    assert name == '<bexpr>'
-    if len(children) == 1: # fault node
-        name = tree_to_str(children[0])
-        if not name: return None, symargs
-        if name not in symargs:
-            symargs[name] = sympy.symbols(name)
-        return symargs[name], symargs
-    else:
-        operator = get_op(children[0])
-        if operator == 'and':
-            a,_ = convert_to_sympy(children[2], symargs)
-            comma = children[3]
-            assert comma[0] == ',', comma[0]
-            b,_ = convert_to_sympy(children[4], symargs)
-            if a is None:
-                assert b is not None
-                return b, symargs
-            elif b is None:
-                assert a is not None
-                return a, symargs
-            return sympy.And(a, b), symargs
-        elif operator == 'or':
-            a,_ = convert_to_sympy(children[2], symargs)
-            comma = children[3]
-            assert comma[0] == ',', comma[0]
-            b,_ = convert_to_sympy(children[4], symargs)
-            if a is None:
-                assert b is not None
-                return b, symargs
-            elif b is None:
-                assert a is not None
-                return a, symargs
-            return sympy.Or(a, b), symargs
-        elif operator == 'neg':
-            a,_ = convert_to_sympy(children[2], symargs)
-            return sympy.Not(a), symargs
+
+
+class BExpr:
+    def __init__(self, s):
+        if s is not None:
+            self._s = s
+            self._tree = self._parse(s)
+            self._simple, self._sympy = self._simplify()
+        else: # create
+            self._s = None
+            self._tree = None
+            self._simple = None
+            self._sympy = None
+
+    def simple(self):
+        if self._simple is None:
+            self._simple = str(self._convert_sympy_to_bexpr(self._sympy))
+        return self._simple
+
+    def _parse(self, k):
+        bexpr_parser = Parser(BEXPR_GRAMMAR, canonical=True, start_symbol=BEXPR_START)
+        bparse_tree = list(bexpr_parser.parse(k))[0]
+        bexpr = bparse_tree[1][0]
+        return bexpr
+
+    def with_key(self, k):
+        s = self.simple()
+        if s: return '<%s %s>' % (stem(k), s)
+        return normalize(k)
+
+    def _simplify(self):
+        e0, defs = self._convert_to_sympy(self._tree)
+        e1 = sympy.to_dnf(e0)
+        e2 = self._convert_sympy_to_bexpr(e1)
+        v = str(e2)
+        my_keys = [k for k in defs]
+        for k in my_keys:
+            del defs[k]
+        return v, e1
+
+    def is_neg_sym(self):
+        op = self.get_operator()
+        if op != 'neg': return False
+        if not isinstance(self._sympy.args[0], sympy.Symbol): return False
+        return True
+
+    def get_operator(self):
+        if isinstance(self._sympy, sympy.And): return 'and'
+        elif isinstance(self._sympy, sympy.Or): return 'or'
+        elif isinstance(self._sympy, sympy.Not): return 'neg'
+        else: return ''
+
+    def op_fst(self):
+        op = self.get_operator()
+        assert op == 'neg'
+        bexpr = BExpr(None)
+        bexpr._sympy = self._sympy.args[0]
+        return bexpr
+
+    def op_fst_snd(self):
+        bexpr = BExpr(None)
+        bexpr._sympy = self._sympy.args[0]
+
+        bexpr_rest = BExpr(None)
+        op = self.get_operator()
+
+        if op == 'and':
+            bexpr_rest._sympy = sympy.And(*self._sympy.args[1:])
+        elif op == 'or':
+            bexpr_rest._sympy = sympy.Or(*self._sympy.args[1:])
         else:
             assert False
+        return bexpr, bexpr_rest
 
-def convert_sympy_to_bexpr(sexpr, log=False):
-    if isinstance(sexpr, sympy.Symbol):
-        return B(str(sexpr))
-    elif isinstance(sexpr, sympy.Not):
-        return NegB(convert_sympy_to_bexpr(sexpr.args[0]))
-    elif isinstance(sexpr, sympy.And):
-        sym_vars = sorted([convert_sympy_to_bexpr(a) for a in sexpr.args], key=str)
-        assert sym_vars
-        return AndB(sym_vars, None)
-    elif isinstance(sexpr, sympy.Or):
-        sym_vars = sorted([convert_sympy_to_bexpr(a) for a in sexpr.args], key=str)
-        assert sym_vars
-        return OrB(sym_vars, None)
-    else:
-        if log: print(repr(sexpr))
-        assert False
+    def negate(self):
+        bexpr = BExpr(None)
+        bexpr._sympy = sympy.Not(self._sympy).simplify()
+        return bexpr
 
-def bexpr_parse(k):
-    bexpr_parser = Parser(BEXPR_GRAMMAR, canonical=True, start_symbol=BEXPR_START)
-    bparse_tree = list(bexpr_parser.parse(k))[0]
-    bexpr = bparse_tree[1][0]
-    return bexpr
-
-def simplify_bexpr(bexpr_input):
-    bexpr_tree = bexpr_parse(bexpr_input)
-    e0, defs = convert_to_sympy(bexpr_tree)
-    e1 = sympy.to_dnf(e0)
-    e2 = convert_sympy_to_bexpr(e1)
-    v = str(e2)
-    my_keys = [k for k in defs]
-    for k in my_keys:
-        del defs[k]
-    return v
-
-def show_simplified_grammar(grammar, no_dups=True, verbose=0):
-    def sb(key):
-        if is_base_key(key):
-            return key
-        return '<%s %s>' %(stem(key), simplify_bexpr(refinement(key)))
-    r = 0
-    k = 0
-    seen = {}
-    for key in grammar:
-        k += 1
-        sk = sb(key)
-        if sk in seen:
-            continue
+    def _flatten(self, bexprs):
+        assert bexprs[0] == '<bexprs>'
+        if len(bexprs[1]) == 1:
+            return [bexprs[1][0]]
         else:
-            seen[sk] = True
-        if verbose > -1: print(sk,'::=')
-        for rule in grammar[key]:
-            r += 1
-            if verbose > 1:
-                pre = r
+            assert len(bexprs[1]) == 3
+            a = bexprs[1][0]
+            comma = bexprs[1][1]
+            rest = bexprs[1][2]
+            return [a] + self._flatten(rest)
+
+    def _convert_to_sympy(self, bexpr_tree, symargs=None):
+        def get_op(node):
+            assert node[0] == '<bop>', node[0]
+            return node[1][0][0]
+        if symargs is None:
+            symargs = {}
+        name, children = bexpr_tree
+        assert name == '<bexpr>', name
+        if len(children) == 1: # fault node
+            name = tree_to_str(children[0])
+            if not name: return None, symargs
+            if name not in symargs:
+                symargs[name] = sympy.symbols(name)
+            return symargs[name], symargs
+        else:
+            operator = get_op(children[0])
+            if operator == 'and':
+                res = self._flatten(children[2])
+                sp = [self._convert_to_sympy(a, symargs) for a in res]
+                return sympy.And(*[a for a,_ in sp]), symargs
+
+            elif operator == 'or':
+                res = self._flatten(children[2])
+                sp = [self._convert_to_sympy(a, symargs) for a in res]
+                return sympy.Or(*[a for a,_ in sp]), symargs
+
+            elif operator == 'neg':
+                res = self._flatten(children[2])
+                assert len(res) == 1
+                a,_ = self._convert_to_sympy(res[0], symargs)
+                return sympy.Not(a), symargs
             else:
-                pre = ''
-            if verbose > -1:
-                print('%s|   ' % pre, ' '.join([sb(t) if is_nt(t) else repr(t) for t in rule]))
-        if verbose > 0:
-            print(k, r)
-    print(k, r)
+                assert False
+
+    def _convert_sympy_to_bexpr(self, sexpr, log=False):
+        if isinstance(sexpr, sympy.Symbol):
+            return B(str(sexpr))
+        elif isinstance(sexpr, sympy.Not):
+            return NegB(self._convert_sympy_to_bexpr(sexpr.args[0]))
+        elif isinstance(sexpr, sympy.And):
+            a = sexpr.args[0]
+            b = sexpr.args[1]
+            if isinstance(a, sympy.Not):
+                if str(a.args[0]) == str(b): return '_|_' # F & ~F == _|_
+            elif isinstance(b, sympy.Not):
+                if str(b.args[0]) == str(a): return '_|_' # F & ~F == _|_
+            sym_vars = sorted([self._convert_sympy_to_bexpr(a) for a in sexpr.args], key=str)
+            assert sym_vars
+            if '_|_' in sym_vars: return '_|_' # if bottom is present in and, that is the result
+            if '' in sym_vars:
+                sym_vars = [s for s in sym_vars if s != ''] # base def does not do anything in and.
+                if not sym_vars: return ''
+            return AndB(sym_vars)
+        elif isinstance(sexpr, sympy.Or):
+            a = sexpr.args[0]
+            b = sexpr.args[1]
+            if isinstance(a, sympy.Not):
+                if str(a.args[0]) == str(b): return '' # F | ~F = U self._convert_sympy_to_bexpr(b)
+            elif isinstance(b, sympy.Not):
+                if str(b.args[0]) == str(a): return '' # F | ~F = U self._convert_sympy_to_bexpr(a)
+
+            sym_vars = sorted([self._convert_sympy_to_bexpr(a) for a in sexpr.args], key=str)
+            assert sym_vars
+            if '' in sym_vars: return '' # if original def is present in or, that is the result
+            if '_|_' in sym_vars:
+                sym_vars = [s for s in sym_vars if s != '_|_']
+                if not sym_vars: return '_|_'
+            return OrB(sym_vars)
+        else:
+            if log: print(repr(sexpr))
+            assert False
+
+def disj(k1, k2, simplify=False):
+    assert is_nt(k1)
+    if k1 == k2: return k1
+    if not refinement(k1): return k1
+    if not refinement(k2): return k2
+    b = BExpr('or(%s,%s)' % (refinement(k1), refinement(k2)))
+    return b.with_key(k1)
+
+def conj(k1, k2, simplify=False):
+    assert is_nt(k1)
+    if k1 == k2: return k1
+    if not refinement(k1): return k2
+    if not refinement(k2): return k1
+    b = BExpr('and(%s,%s)' % (refinement(k1), refinement(k2)))
+    return b.with_key(k1)
 
 def is_A_more_refined_than_B(ruleA, ruleB, porder):
     if len(ruleA) != len(ruleB): return False
@@ -623,7 +673,7 @@ def is_A_more_refined_than_B(ruleA, ruleB, porder):
         if not is_nt(a_) or not is_nt(b_):
             if a_ != b_: return False
             continue
-        a = normalize(a_) 
+        a = normalize(a_)
         b = normalize(b_)
         if a != b: return False
         if a not in porder or b not in porder: return None
@@ -654,12 +704,12 @@ def is_keyA_more_refined_than_keyB(keyA, keyB, porder, grammar):
     # than that in the second key.
     # a rule is smaller than another if all tokens in that rule is either equal (matching) or smaller than
     # the corresponding token in the other.
-    
+
     # if normalize(keyB) == keyB: return True # normalized key is always the top (and may not exist in grammar)
-    
+
     A_rules = grammar[keyA]
     B_rules = grammar[keyB]
-   
+
     for A_rule in A_rules:
         v,unk = get_general_rule(A_rule, B_rules, porder)
         if v is None:
@@ -678,7 +728,7 @@ def insert_into_porder(my_key, porder, grammar):
                 return True, (my_key, [tree])
             else:
                 return False, tree
- 
+
         v = is_keyA_more_refined_than_keyB(my_key, k, porder, grammar)
         if is_base_key(k): v = True
         # if v is unknown...
@@ -756,7 +806,7 @@ def remove_redundant_rules(grammar, porder=None):
             porder.update(_porder)
         else:
             pass
-        
+
     new_g = {}
     removed_rules = 0
     for key in grammar:
@@ -797,7 +847,7 @@ def grammar_gc(grammar, start_symbol, options=(1,2), log=False):
             print('GC: ', unused_keys, empty_keys)
         if not (len(unused_keys) + len(empty_keys)):
             break
- 
+
     # removing redundant rules is slightly dangerous. It can remove things
     # like finite limit of a recursion because the limit is more refined than
     # other rules.
@@ -807,11 +857,11 @@ def grammar_gc(grammar, start_symbol, options=(1,2), log=False):
     #  <E l> = 1
     # Here, <E f> is more general than <E l> precisely because <E l> exists
     # but our partial orders are not intelligent enough (todo: check)
-    if 3 in options:
-        g2, redundant_rules = remove_redundant_rules(g)
-    else:
-        g2, redundant_rules = g, 0
-        
+    #if 3 in options:
+    #    g2, redundant_rules = remove_redundant_rules(g)
+    #else:
+    g2, redundant_rules = g, 0
+
     #if 4 in options:
     #  We need to incorporate simplify booleans
     #else:
@@ -987,10 +1037,10 @@ def atleast_one_fault_grammar(grammar, start_symbol, fault_node, f_idx):
     pattern_g, pattern_s = faulty_node_to_pattern_grammar(fault_node, prefix_l)
     # the pattern grammar contains the faulty keys and their definitions.
 
-    # Next, get the reaching grammar. This simply embeds at one guaranteed fault 
+    # Next, get the reaching grammar. This simply embeds at one guaranteed fault
     # in each of the rules.
     reachable_keys = reachable_dict(grammar)
-    # We want to insert the fault prefix_f into each insertable positions. 
+    # We want to insert the fault prefix_f into each insertable positions.
     # the insertable locations are those that can reach reaching_fsym
     reach_g = insert_atleast_one_fault_into_grammar(grammar, key_f, prefix_f, reachable_keys)
 
@@ -1006,12 +1056,12 @@ def atleast_one_fault_grammar(grammar, start_symbol, fault_node, f_idx):
     # nonrecursive, then it simple. We replace the definition reach_g[reaching_fsym]
     # with that of pattern_g[pattern_s] and we are done.
     pattern_rule = pattern_g[pattern_s][0] # get the pattern rule
-    
+
     # However, if the reach_g[reaching_fsym] rules contain any tokens that can
     # reach `reaching_fsym` then it becomes more complex because we do not want
     # to miss out on these patterns. On the other hand, we also need to make sure that we do
     # not introduce the fault by matching the first expansion of the fault node.
-    
+
     # print('WARNING: atleast_one_fault_grammar is incomplete.')
     reaching_rules = []
     for rule in reach_g[reaching_fsym]:
@@ -1020,12 +1070,12 @@ def atleast_one_fault_grammar(grammar, start_symbol, fault_node, f_idx):
             # # we do not want to inadvertantly introduce the fault again. So this requires special
             # # handling. In effect, we want to make sure that the rule is actually a negation
             # # of the pattern_rule, one token at a time. This can be done only once negation comes in.
-            
+
             # However, given that we have no restriction on the number of faults inserted,
             # we can merrily add this rule. The only restriction being that, the inserted rule
             # should not allow a non-matching parse to go forward. However, this is done by
             # construction since we are using reaching rules.
-            
+
             # # note: this may not be correct. in Factor +F1, (expr L1_1) is finite, and will
             # # get removed by gc as being more refined than (expr +F1).
             reaching_rules.append(rule)
@@ -1036,15 +1086,15 @@ def atleast_one_fault_grammar(grammar, start_symbol, fault_node, f_idx):
                 if is_nt(token) and key_f in reachable_keys[token]:
                     reaching_rules.append(rule)
                     break
- 
+
     combined_grammar = {**grammar, **pattern_g, **reach_g}
     combined_grammar[reaching_fsym] = reaching_rules + [pattern_rule]
-   
+
     return combined_grammar, to_fkey_prefix(start_symbol, F_prefix(f_idx), FKey.atleast)
 
 def negate_prefix(prefix):
     assert ' ' not in prefix
-    return 'neg(%s)' % prefix
+    return BExpr(prefix).negate().simple()
 
 def is_negative_key(key):
     nk = refinement(key)
@@ -1062,9 +1112,7 @@ def negate_key(k):
 
 def unnegate_key(k):
     assert is_negative_key(k)
-    ref = refinement(k)
-    #neg()
-    return '<%s %s>' % (stem(k), ref[4:-1])
+    return negate_key(k)
 
 def negate_key_at(rule, at):
     new_rule = []
@@ -1097,7 +1145,7 @@ def negate_a_base_rule_wrt_fault_in_pattern_grammar(base_rule, fault_key, reacha
 def negate_a_refined_rule_in_pattern_grammar(refined_rule, fault_key, reachable_keys, log=False):
     assert reachable_keys is not None
     # TODO: check whether the rule is unrefined, and return early?
-    
+
     # first, preprocess the rule
     prefix = refinement(fault_key)
     refinements = []
@@ -1137,13 +1185,13 @@ def negate_a_refined_rule_in_pattern_grammar(refined_rule, fault_key, reachable_
 
     # if there are no refinements found, then there is nothing to negate it against.
     # which means that the match will happen if we add the rule as is. We want to prevent the
-    # match. So, 
+    # match. So,
     # if not found: <- NO
     #    negated_rules.append(rerefined_rule)
-    
+
     # e.g. '<factor L1_2>': [('(', '<expr>', ')')
     # the trouble with unrefined (i.e no refined key to negate) is that negating it is empty.
-    if not found: 
+    if not found:
         assert not [k for k in refined_rule if is_nt(k) and is_refined_key(k)]
     else:
         assert [k for k in refined_rule if is_nt(k) and is_refined_key(k)]
@@ -1165,7 +1213,7 @@ def negate_definition_in_pattern_grammar(fault_key, refined_rules, base_rules, r
         negated_rules_base.append(negated_rule)
         refinements.extend(refs)
         if log: print('>  ', negated_rule)
-            
+
     # the simple part. Given the set of fules, we take one rule at a time,
     # and genrate the negated ruleset from that.
     negated_rules_refined = []
@@ -1174,7 +1222,7 @@ def negate_definition_in_pattern_grammar(fault_key, refined_rules, base_rules, r
         neg_rules, refs = negate_a_refined_rule_in_pattern_grammar(ruleR, fault_key, reachable_keys, log)
         negated_rules_refined.extend(neg_rules)
         refinements.extend(refs)
-        
+
     return negated_rules_refined + negated_rules_base, refinements
 
 def negated_pattern_grammar(pattern_grammar, pattern_start, fault_key, base_grammar, log=False):
@@ -1191,7 +1239,7 @@ def negated_pattern_grammar(pattern_grammar, pattern_start, fault_key, base_gram
         normal_l_key = normalize(l_key)
         base_rules = base_grammar[normal_l_key]
         refined_rules = pattern_grammar[l_key]
-        
+
         negated_rules, refs = negate_definition_in_pattern_grammar(fault_key, refined_rules, base_rules,
                                                                 reachable_keys, log)
         # TODO does negated_rules require `and` of similar rules? (see self negation)
@@ -1250,7 +1298,7 @@ def no_fault_grammar(grammar, start_symbol, fault_node, f_idx, log=False):
     npattern_g, npattern_s, refs = negated_pattern_grammar(pattern_g, pattern_s, fsym, grammar, log)
     reachable_keys = reachable_dict(grammar)
     # the new grammar contains the faulty keys and their definitions.
-    # next, want to insert the fault prefix_f into each insertable positions. 
+    # next, want to insert the fault prefix_f into each insertable positions.
     # the insertable locations are those that can reach fsym
     noreach_g = remove_all_instances_of_fault_from_grammar(grammar, key_f, prefix_f, reachable_keys)
     for key in refs: assert key in noreach_g
@@ -1260,12 +1308,12 @@ def no_fault_grammar(grammar, start_symbol, fault_node, f_idx, log=False):
     # be replaced with fsym, but the definitions kept. This is because we want to preserve
     # the rule patterns. We do not want normal expansions to go through since it may mean
     # no fault inserted. However, we want self recursion to happen.
-    
+
     combined_grammar = {**grammar, **npattern_g, **noreach_g}
     new_rules = npattern_g[npattern_s] # get the negated pattern rule
-    
+
     combined_grammar[noreaching_fsym] = new_rules
-    
+
     return combined_grammar, negate_base_key(start_symbol, refinement(fsym))
 
 def remove_all_faults_except_one_from_key(grammar, key, fsym, prefix, reachable):
@@ -1310,12 +1358,12 @@ def atmost_one_fault_grammar(grammar, start_symbol, fault_node, f_idx, log=False
     fsym = to_fkey_prefix(key_f, prefix_f, FKey.atmost)
     atleast_fsym = to_fkey_prefix(key_f, prefix_f, FKey.atleast)
     noreaching_fsym = negate_key(atleast_fsym)
-    
+
     pattern_g, pattern_s  = faulty_node_to_pattern_grammar(fault_node, prefix_l)
     npattern_g, npattern_s, refs = negated_pattern_grammar(pattern_g, pattern_s, atleast_fsym, grammar, log)
     reachable_keys = reachable_dict(grammar)
     # the new grammar contains the faulty keys and their definitions.
-    # next, want to insert the fault prefix_f into each insertable positions. 
+    # next, want to insert the fault prefix_f into each insertable positions.
     # the insertable locations are those that can reach fsym
     atmost_g = remove_all_faults_except_one_from_grammar(grammar, key_f, prefix_f, reachable_keys)
 
@@ -1324,17 +1372,17 @@ def atmost_one_fault_grammar(grammar, start_symbol, fault_node, f_idx, log=False
     noreach_g[noreaching_fsym] = negation_connect
 
     for key in refs: assert key in noreach_g, key
-    
+
     # now, the faulty key is an alternative to the original.
     # We have to take care of one thing though. The `fkey` in the linear grammar should
     # be replaced with fsym, but the definitions kept. This is because we want to preserve
     # the rule patterns. We do not want normal expansions to go through since it may mean
     # no fault inserted. However, we want self recursion to happen.
     pattern_rule = pattern_g[pattern_s][0]
-    
+
     combined_grammar = {**grammar, **pattern_g, **npattern_g, **atmost_g, **noreach_g}
     new_rules = pattern_g[pattern_s] # get the pattern rule
-   
+
     combined_grammar[fsym].extend(new_rules)
     #combined_grammar[fsym] = new_rules
     return combined_grammar, to_fkey_prefix(start_symbol, F_prefix(f_idx), FKey.atmost)
@@ -1382,19 +1430,19 @@ def exactly_one_fault_grammar(grammar, start_symbol, fault_node, f_idx, log=Fals
     fsym = to_fkey_prefix(key_f, prefix_f, FKey.exactly)
     atleast_fsym = to_fkey_prefix(key_f, prefix_f, FKey.atleast)
     noreaching_fsym = negate_key(atleast_fsym)
-    
+
     pattern_g, pattern_s  = faulty_node_to_pattern_grammar(fault_node, prefix_l)
     npattern_g, npattern_s, refs  = negated_pattern_grammar(pattern_g, pattern_s, atleast_fsym, grammar, log)
     reachable_keys = reachable_dict(grammar)
     # the new grammar contains the faulty keys and their definitions.
-    # next, want to insert the fault prefix_f into each insertable positions. 
+    # next, want to insert the fault prefix_f into each insertable positions.
     # the insertable locations are those that can reach fsym
     exactly_g = keep_exactly_one_fault_at_grammar(grammar, key_f, prefix_f, reachable_keys)
-    
+
     noreach_g = remove_all_instances_of_fault_from_grammar(grammar, key_f, prefix_f, reachable_keys)
     negation_connect = npattern_g[npattern_s] # get the negated pattern rule
     noreach_g[noreaching_fsym] = negation_connect
-    
+
     for key in refs: assert key in noreach_g, key
     # now, the faulty key is an alternative to the original.
     # We have to take care of one thing though. The `fkey` in the linear grammar should
@@ -1434,110 +1482,108 @@ def remove_unused(grammar, start_symbol, log=False):
     new_g = {k: [list(r) for r in sort_rules(grammar[k])] for k in order if k in grammar}
     return new_g, {k:grammar[k] for k in grammar if k not in new_g}, faulty
 
-def reconstruct_rules_from_bexpr(key, tree, grammar):
-    name, children = tree
-    assert name == '<bexpr>'
-    name_, op_ = children[0]
-    bexpr = tree_to_str(tree)
-    f_key = '<%s %s>' % (stem(key), bexpr)
+
+def reconstruct_neg_fault(grammar, key, bexpr):
+    f_key = bexpr.with_key(key)
+    nf_key = negate_key(f_key)
+    assert nf_key in grammar
+    base_grammar, base_start = normalize_grammar(grammar), normalize(key)
+    g1_, s1, r1 = reconstruct_rules_from_bexpr(key, bexpr.negate(), grammar)
+    g1, saved_keys, undef_keys  = remove_unused(g1_, s1)
+    g, s, r = negate_grammar_(g1, s1, base_grammar, base_start)
+    g[f_key] = g[s]
+    assert s in g, s
+    g = {**grammar, **g1, **g, **saved_keys}
+    return g, f_key, undefined_keys(g)
+
+
+def reconstruct_neg_bexpr(grammar, key, bexpr):
+    fst = bexpr.op_fst()
+    base_grammar, base_start = normalize_grammar(grammar), normalize(key)
+    g1_, s1, r1 = reconstruct_rules_from_bexpr(key, fst, grammar)
+    g1, saved_keys, undef_keys  = remove_unused(g1_, s1)
+    g, s, r = negate_grammar_(g1, s1, base_grammar, base_start)
+    assert s in g, s
+    g = {**grammar, **g1, **g, **saved_keys}
+    return g, s, undefined_keys(g)
+
+def reconstruct_and_bexpr(grammar, key, bexpr):
+    fst, snd = bexpr.op_fst_snd()
+    f_key = bexpr.with_key(key)
+    g1_, s1, r1 = reconstruct_rules_from_bexpr(key, fst, grammar)
+    if fst == snd: # or of same keys is same
+        print(f_key)
+        g = {**grammar, **g1_}
+        g[f_key] = g[s1]
+        return g, f_key, undefined_keys(g)
+    g1, saved_keys1, undef_keys1  = remove_unused(g1_, s1)
+    g2_, s2, r2 = reconstruct_rules_from_bexpr(key, snd, grammar)
+    g2, saved_keys2, undef_keys2  = remove_unused(g2_, s2)
+    g, s, r = and_grammars_(g1, s1, g2, s2)
+    assert s in g
+    g = {**grammar, **g1, **g2, **g, **saved_keys1, **saved_keys2}
+    assert f_key in g, f_key
+    return g, s, undefined_keys(g)
+
+def reconstruct_or_bexpr(grammar, key, bexpr):
+    fst, snd = bexpr.op_fst_snd()
+    f_key = bexpr.with_key(key)
+    g1_, s1, r1 = reconstruct_rules_from_bexpr(key, fst, grammar)
+    assert fst.with_key(key) in g1_
+    if fst == snd: # and of same keys is same
+        g = {**grammar, **g1_}
+        g[f_key] = g[s1]
+        return g, f_key, undefined_keys(g)
+    g1, saved_keys1, undef_keys1  = remove_unused(g1_, s1)
+    g2_, s2, r2 = reconstruct_rules_from_bexpr(key, snd, grammar)
+    assert snd.with_key(key) in g2_
+    g2, saved_keys2, undef_keys2  = remove_unused(g2_, s2)
+    g, s, r = or_grammars_(g1, s1, g2, s2)
+    assert s in g
+    g = {**grammar, **g1, **g2, **g, **saved_keys1, **saved_keys2}
+    assert f_key in g, (f_key, s)
+    return g, s, undefined_keys(g)
+
+
+def reconstruct_rules_from_bexpr(key, bexpr, grammar):
+    f_key = bexpr.with_key(key)
     if f_key in grammar:
         return grammar, f_key, []
-    elif name_ == '<fault>':
-        # is 
-        if f_key in grammar:
-            return grammar, f_key, []
-        else:
-            nf_key = negate_key(f_key)
-            assert nf_key in grammar
-            fst = bexpr_parse('neg(%s)' % bexpr)
-            base_grammar, base_start = normalize_grammar(grammar), normalize(key)
-            g1_, s1, r1 = reconstruct_rules_from_bexpr(key, fst, grammar)
-            g1, saved_keys, undef_keys  = remove_unused(g1_, s1)
-            g, s, r = negate_grammar_(g1, s1, base_grammar, base_start)
-            g[f_key] = g[s]
-            #assert refinement(s) == bexpr
-            assert s in g
-            keys = find_all_nonterminals(g1)
-            g = {**grammar, **g1, **g, **saved_keys}
-            return g, f_key, undefined_keys(g)
+    elif bexpr.is_neg_sym():
+        return reconstruct_neg_fault(grammar, key, bexpr)
     else:
-        operator = op_[0][0]
-        assert operator in ['and', 'or', 'neg'], operator
-        assert (children[1][0],  children[-1][0]) == ('(', ')')
         new_grammar = grammar
+        operator = bexpr.get_operator()
         if operator == 'and':
-            fst = children[2]
-            assert children[3][0] == ','
-            snd = children[4]
-            if fst == snd: # or of same keys is same
-                g1, s1, r1 = reconstruct_rules_from_bexpr(key, fst, grammar)
-                g = {**grammar, **g1}
-                g[f_key] = g[s1]
-                return g, f_key, undefined_keys(g)
-            g1_, s1, r1 = reconstruct_rules_from_bexpr(key, fst, grammar)
-            g1, saved_keys1, undef_keys1  = remove_unused(g1_, s1)
-            g2_, s2, r2 = reconstruct_rules_from_bexpr(key, snd, grammar)
-            g2, saved_keys2, undef_keys2  = remove_unused(g2_, s2)
-            g, s, r = and_grammars_(g1, s1, g2, s2)
-            assert refinement(s) == bexpr
-            assert s in g
-            g = {**grammar, **g1, **g2, **g, **saved_keys1, **saved_keys2}
-            return g, s, undefined_keys(g)
+            return reconstruct_and_bexpr(grammar, key, bexpr)
         elif operator == 'or':
-            fst = children[2]
-            assert children[3][0] == ','
-            snd = children[4]
-            if fst == snd: # and of same keys is same
-                g1, s1, r1 = reconstruct_rules_from_bexpr(key, fst, grammar)
-                g = {**grammar, **g1}
-                g[f_key] = g[s1]
-                return g, f_key, undefined_keys(g)
-            g1_, s1, r1 = reconstruct_rules_from_bexpr(key, fst, grammar)
-            g1, saved_keys1, undef_keys1  = remove_unused(g1_, s1)
-            g2_, s2, r2 = reconstruct_rules_from_bexpr(key, snd, grammar)
-            g2, saved_keys2, undef_keys2  = remove_unused(g2_, s2)
-            g, s, r = or_grammars_(g1, s1, g2, s2)
-            assert refinement(s) == bexpr
-            assert s in g
-            g = {**grammar, **g1, **g2, **g, **saved_keys1, **saved_keys2}
-            return g, s, undefined_keys(g)
+            return reconstruct_or_bexpr(grammar, key, bexpr)
         elif operator == 'neg':
-            fst = children[2]
-            base_grammar, base_start = normalize_grammar(grammar), normalize(key)
-            g1_, s1, r1 = reconstruct_rules_from_bexpr(key, fst, grammar)
-            g1, saved_keys, undef_keys  = remove_unused(g1_, s1)
-            g, s, r = negate_grammar_(g1, s1, base_grammar, base_start)
-            assert refinement(s) == bexpr
-            assert s in g
-            keys = find_all_nonterminals(g1)
-            g = {**grammar, **g1, **g, **saved_keys}
-            return g, s, undefined_keys(g)
+            return reconstruct_neg_bexpr(grammar, key, bexpr)
         else:
             assert False
 
 def reconstruct_key(refined_key, grammar, log=False):
-    bexpr = bexpr_parse(refinement(refined_key))
     keys = [refined_key]
     defined = set()
     while keys:
         if log: print(len(keys))
         key_to_reconstruct, *keys = keys
         if log: print('reconstructing:', key_to_reconstruct)
-        if key_to_reconstruct in defined: raise Exception('Key found:', key_to_reconstruct)
+        if key_to_reconstruct in defined:
+            raise Exception('Key found:', key_to_reconstruct)
         defined.add(key_to_reconstruct)
-        sref = simplify_bexpr(refinement(key_to_reconstruct))
-        if log: print(repr(sref))
-        bexpr = bexpr_parse(sref)
-        nkey = '<%s %s>' % (stem(key_to_reconstruct), sref)
-        if log: print('simplified_to:', nkey)
-        grammar, s, refs = reconstruct_rules_from_bexpr(normalize(nkey),
-                                                        bexpr, grammar)
+        bexpr = BExpr(refinement(key_to_reconstruct))
+        nrek = normalize(key_to_reconstruct)
+        if bexpr.simple():
+            nkey = bexpr.with_key(key_to_reconstruct)
+            if log: print('simplified_to:', nkey)
+            grammar, s, refs = reconstruct_rules_from_bexpr(nrek, bexpr, grammar)
+        else:
+            nkey = nrek # base key
         assert nkey in grammar
         grammar[key_to_reconstruct] = grammar[nkey]
-        #for k in refs: if k not in keys: keys.append(k)
-        #_, saved_keys, keys  = remove_unused(grammar, s)
         keys = undefined_keys(grammar)
-        pass
     return grammar
 
 def find_reachable_keys_unchecked(grammar, key, reachable_keys=None, found_so_far=None):
@@ -1564,6 +1610,7 @@ def reachable_dict_unchecked(grammar):
         reachable[key] = keys
     return reachable
 
+
 def complete(grammar, start, log=False):
     keys = undefined_keys(grammar)
     reachable_keys = reachable_dict_unchecked(grammar)
@@ -1571,19 +1618,9 @@ def complete(grammar, start, log=False):
         if key not in reachable_keys[start]: continue
         grammar = reconstruct_key(key, grammar, log)
     grammar_, start_ = grammar_gc(grammar, start)
-    return grammar_
+    return _grammar
 
 import itertools as I
-
-def conj(k1, k2, simplify=False):
-    if simplify:
-        if k1 == k2:
-            return k1
-        elif not refinement(k1):
-            return k2
-        elif not refinement(k2):
-            return k1
-    return '<%s and(%s,%s)>' % (stem(k1), refinement(k1), refinement(k2))
 
 def and_rules(rulesA, rulesB):
     AandB_rules = []
@@ -1614,24 +1651,18 @@ def and_grammars_(g1, s1, g2, s2):
         # define and(k1, k2)
         if normalize(k1) != normalize(k2): continue
         # find matching rules
-        and_key = conj(k1, k2) 
+        and_key = conj(k1, k2)
         g[and_key], refs = and_rules(g1[k1], g2[k2])
         refinements.extend(refs)
     #for k in refinements: assert k in g
     return g, conj(s1, s2), refinements
 
-def disj(k1, k2, simplify=False):
-    assert is_nt(k1)
-    if simplify:
-        if k1 == k2:
-            return k1
-    return '<%s or(%s,%s)>' % (stem(k1), refinement(k1), refinement(k2))
 
 def merge_similar_rules(rule1, rule2):
     assert normalized_rule_match(rule1, rule2)
     new_rule = []
     refinements = []
-    
+
     # note. This would not work with multi-nt-token rules.
     # so we need to restrict ourselves to grammars that only
     # allow a single token rule opposite start.
@@ -1646,7 +1677,7 @@ def merge_similar_rules(rule1, rule2):
             new_rule.append(k)
             refinements.append((k,(t1, t2)))
     return new_rule, refinements
-            
+
 
 def merge_similar_rules_positions(rules):
     def rule_match(rule1, rule2):
@@ -1658,7 +1689,7 @@ def merge_similar_rules_positions(rules):
         pos = diffs[0]
         m_rule = [disj(t, rule2[i], simplify=True) if i== pos else t for i,t in enumerate(rule1)]
         return m_rule, m_rule[pos]
-        
+
     # these rules are from same key and have similar pattern as well as similar refinement positions.
     if len(rules) == 1: return rules, []
     cur_rule, *rules = rules
@@ -1677,7 +1708,7 @@ def merge_similar_rules_positions(rules):
             merged_rules.append(mrule)
         else:
             merged_rules.append(nrule)
-    
+
     if not found:
         merged_rules += [nrule]
     return merged_rules, refs
@@ -1708,9 +1739,9 @@ def merge_disj_rules(g1):
 def or_grammars_(g1, s1, g2, s2):
     g = {}
     # now get the matching keys for each pair.
-    for k in list(g1.keys()) + list(g2.keys()): 
+    for k in list(g1.keys()) + list(g2.keys()):
          g[k] = [[t for t in r] for r in list(set([tuple(k) for k in (g1.get(k, []) + g2.get(k, []))]))]
-            
+
     g[disj(s1, s2)] = g1[s1] + g2[s2]
     g, refinements = merge_disj_rules(g) #[s1][0], g2[s2][0])
     #new_rule, refinements = merge_similar_rules(g1[s1][0], g2[s2][0])
@@ -1742,7 +1773,7 @@ def negate_a_rule(refined_rule, log=False):
         return unnegate_key(t) if is_negative_key(t) else negate_key(t)
     _base_pos, refined_pos = find_base_and_refined_positions(refined_rule)
     refinements = []
- 
+
     # now, take refined, one at a time, and negate them, while changing all other
     # refined to base.
     negated_rules = []
@@ -1788,24 +1819,24 @@ def negate_definition(refined_rules, base_rules, log):
         if not refined_rules_p:
             new_rulesB.append(base_rule)
             continue
-        
+
         neg_rulesB, refs1 = negate_ruleset(refined_rules_p, log)
         new_refs.extend(refs1)
         if log: print('negate_ruleset:', len(neg_rulesB))
- 
+
         # TODO: Now, the idea is to do a `product` of each item in
         # neg_rulesB with every other item. Each item has multiple
         # rules in them, where one refinement is negated. So combining
         # that with others of similar kind using `and` should produce
         # a negated output.
-        
+
         # Note that `refined_rules_p` are from the exact same pattern.
         # now, we have negations of all rules. We need to compute `and` of similar
         for m_rulesB in I.product(*neg_rulesB):
             r, ref = multi_and_rules(m_rulesB)
             new_rulesB.append(r)
             new_refs.extend(ref)
-        
+
     # now, include the unmatching base rules, and append.
     return new_rulesB, new_refs
 
@@ -1856,7 +1887,7 @@ def difference_grammars(grammarA, startA, grammarB, startB):
     if is_base_key(startB):
         return {'<start>': []}, '<start>' # empty
     base_g = normalize_grammar(grammarA)
-    base_s = normalize(startA) 
+    base_s = normalize(startA)
     negB_g, negB_s, refs = negate_grammar_(grammarB, startB, base_g, base_s)
     negB_g = complete(negB_g, negB_s)
     AminusB_g, AminusB_s, refs = and_grammars_(grammarA, startA, negB_g, negB_s)
@@ -1870,7 +1901,7 @@ def is_keyA_more_refined_than_keyB(keyA, keyB, porder, grammar):
     # a rule is smaller than another if all tokens in that rule is either equal
     # (matching) or smaller than
     # the corresponding token in the other.
-    
+
     A_B_g, A_B_s = difference_grammars(grammar, keyA, grammar, keyB)
     if is_cfg_empty(A_B_g, A_B_s): #A is smaller, so A-B should be empty.
         return True
@@ -1886,7 +1917,7 @@ def insert_into_porder(my_key, porder, grammar):
                 return True, (my_key, [tree])
             else:
                 return False, tree
- 
+
         v = is_keyA_more_refined_than_keyB(my_key, k, porder, grammar)
         if is_base_key(k): v = True
         # if v is unknown...
@@ -1946,11 +1977,11 @@ def grammar_gc(grammar, start_symbol, options=(1,2), log=False):
             for rule in g1[k]:
                 for t in rule: assert type(t) is str
 
-        if 3 in options:
-            if log: print('remove_redundant_rules..')
-            g2, redundant_rules = remove_redundant_rules(g1, po)
-        else:
-            g2, redundant_rules = g1, 0
+        #if 3 in options:
+        #    if log: print('remove_redundant_rules..')
+        #    g2, redundant_rules = remove_redundant_rules(g1, po)
+        #else:
+        g2, redundant_rules = g1, 0
         g = g2
 
         if log:
