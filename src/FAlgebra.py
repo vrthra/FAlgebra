@@ -476,6 +476,13 @@ def reachable_dict(grammar):
 
 import sympy
 
+class LitB:
+    def __init__(self, a): self.a = a
+    def __str__(self): return self.a
+
+TrueB = LitB('')
+FalseB = LitB('_|_')
+
 class OrB:
     def __init__(self, a): self.l = a
     def __str__(self): return 'or(%s)' % ','.join(sorted([str(s) for s in self.l]))
@@ -488,6 +495,7 @@ class NegB:
 class B:
     def __init__(self, a): self.a = a
     def __str__(self): return str(self.a)
+
 
 
 
@@ -622,30 +630,30 @@ class BExpr:
             a = sexpr.args[0]
             b = sexpr.args[1]
             if isinstance(a, sympy.Not):
-                if str(a.args[0]) == str(b): return '_|_' # F & ~F == _|_
+                if str(a.args[0]) == str(b): return FalseB # F & ~F == _|_
             elif isinstance(b, sympy.Not):
-                if str(b.args[0]) == str(a): return '_|_' # F & ~F == _|_
+                if str(b.args[0]) == str(a): return FalseB # F & ~F == _|_
             sym_vars = sorted([self._convert_sympy_to_bexpr(a) for a in sexpr.args], key=str)
             assert sym_vars
-            if '_|_' in sym_vars: return '_|_' # if bottom is present in and, that is the result
-            if '' in sym_vars:
-                sym_vars = [s for s in sym_vars if s != ''] # base def does not do anything in and.
-                if not sym_vars: return ''
+            if FalseB in sym_vars: return FalseB # if bottom is present in and, that is the result
+            if TrueB in sym_vars:
+                sym_vars = [s for s in sym_vars if s != TrueB] # base def does not do anything in and.
+                if not sym_vars: return TrueB
             return AndB(sym_vars)
         elif isinstance(sexpr, sympy.Or):
             a = sexpr.args[0]
             b = sexpr.args[1]
             if isinstance(a, sympy.Not):
-                if str(a.args[0]) == str(b): return '' # F | ~F = U self._convert_sympy_to_bexpr(b)
+                if str(a.args[0]) == str(b): return TrueB # F | ~F = U self._convert_sympy_to_bexpr(b)
             elif isinstance(b, sympy.Not):
-                if str(b.args[0]) == str(a): return '' # F | ~F = U self._convert_sympy_to_bexpr(a)
+                if str(b.args[0]) == str(a): return TrueB # F | ~F = U self._convert_sympy_to_bexpr(a)
 
             sym_vars = sorted([self._convert_sympy_to_bexpr(a) for a in sexpr.args], key=str)
             assert sym_vars
-            if '' in sym_vars: return '' # if original def is present in or, that is the result
-            if '_|_' in sym_vars:
-                sym_vars = [s for s in sym_vars if s != '_|_']
-                if not sym_vars: return '_|_'
+            if TrueB in sym_vars: return TrueB # if original def is present in or, that is the result
+            if FalseB in sym_vars:
+                sym_vars = [s for s in sym_vars if s != FalseB]
+                if not sym_vars: return FalseB
             return OrB(sym_vars)
         else:
             if log: print(repr(sexpr))
@@ -823,49 +831,6 @@ def remove_redundant_rules(grammar, porder=None):
                     continue
             new_g[key] = ruleset
     return new_g, removed_rules
-
-def grammar_gc(grammar, start_symbol, options=(1,2), log=False):
-    g = grammar
-    while True:
-        if 1 in options:
-            g0, empty_keys = remove_empty_keys(g)
-        else:
-            g0, empty_keys = g, []
-        for k in g0:
-            for rule in g0[k]:
-                for t in rule: assert type(t) is str
-
-        if 2 in options:
-            g1, unused_keys = remove_unused_keys(g0, start_symbol)
-        else:
-            g1, unused_keys = g0, []
-        for k in g1:
-            for rule in g1[k]:
-                for t in rule: assert type(t) is str
-        g = g1
-        if log:
-            print('GC: ', unused_keys, empty_keys)
-        if not (len(unused_keys) + len(empty_keys)):
-            break
-
-    # removing redundant rules is slightly dangerous. It can remove things
-    # like finite limit of a recursion because the limit is more refined than
-    # other rules.
-    # E.g
-    #  <E f> = <E f>
-    #        | <E l>
-    #  <E l> = 1
-    # Here, <E f> is more general than <E l> precisely because <E l> exists
-    # but our partial orders are not intelligent enough (todo: check)
-    #if 3 in options:
-    #    g2, redundant_rules = remove_redundant_rules(g)
-    #else:
-    g2, redundant_rules = g, 0
-
-    #if 4 in options:
-    #  We need to incorporate simplify booleans
-    #else:
-    return g2, start_symbol
 
 def mark_path_abstract(tree, path):
     name, children = find_node(tree, path)
@@ -1952,16 +1917,30 @@ def insert_into_porder(my_key, porder, grammar):
         porder[key] = v
     return updated
 
-def grammar_gc(grammar, start_symbol, options=(1,2), log=False):
+def remove_nulled_rules(grammar):
+    g = {}
+    nulled_rules = []
+    for k in grammar:
+        g[k] = []
+        for rule in grammar[k]:
+            skip = False
+            for t in rule:
+                if not is_nt(t): continue
+                if refinement(t) == '_|_':
+                    skip = True
+                    break
+            if not skip:
+                g[k].append(rule)
+            else:
+                nulled_rules.append(rule)
+    return g, nulled_rules
+
+
+def grammar_gc(grammar, start_symbol, options=(1,2, 3), log=False):
     g = grammar
-    po = {}
     while True:
         if 1 in options:
-            if log: print('remove_empty_keys..')
             g0, empty_keys = remove_empty_keys(g)
-            if log:
-                for k in empty_keys:
-                    print('removed:', k)
         else:
             g0, empty_keys = g, []
         for k in g0:
@@ -1969,7 +1948,6 @@ def grammar_gc(grammar, start_symbol, options=(1,2), log=False):
                 for t in rule: assert type(t) is str
 
         if 2 in options:
-            if log: print('remove_unused_keys..')
             g1, unused_keys = remove_unused_keys(g0, start_symbol)
         else:
             g1, unused_keys = g0, []
@@ -1977,16 +1955,31 @@ def grammar_gc(grammar, start_symbol, options=(1,2), log=False):
             for rule in g1[k]:
                 for t in rule: assert type(t) is str
 
-        #if 3 in options:
-        #    if log: print('remove_redundant_rules..')
-        #    g2, redundant_rules = remove_redundant_rules(g1, po)
-        #else:
-        g2, redundant_rules = g1, 0
+        if 3 in options:
+            g2, nulled_rules = remove_nulled_rules(g1)
+        else:
+            g2, nulled_rules = g1, []
+
         g = g2
-
         if log:
-            print('GC: ', unused_keys, empty_keys)
-        if not (len(unused_keys) + len(empty_keys) + redundant_rules):
+            print('GC: ', unused_keys, empty_keys, nulled_rules)
+        if not (len(unused_keys) + len(empty_keys) + len(nulled_rules)):
             break
-    return g, start_symbol
+    # removing redundant rules is slightly dangerous. It can remove things
+    # like finite limit of a recursion because the limit is more refined than
+    # other rules.
+    # E.g
+    #  <E f> = <E f>
+    #        | <E l>
+    #  <E l> = 1
+    # Here, <E f> is more general than <E l> precisely because <E l> exists
+    # but our partial orders are not intelligent enough (todo: check)
+    #if 3 in options:
+    #    g2, redundant_rules = remove_redundant_rules(g)
+    #else:
+    # g2, redundant_rules = g, 0
 
+    #if 4 in options:
+    #  We need to incorporate simplify booleans
+    #else:
+    return g, start_symbol
