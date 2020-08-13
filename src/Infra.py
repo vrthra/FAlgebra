@@ -125,7 +125,7 @@ def main(gf_fbjson, bug_fn, pred, results_dir='results', max_checks=A.MAX_CHECKS
     with open('./%s/%s.json' % (results_dir, A.NAME + '_exactly_one_fault_g'), 'w+') as f:
         print(json.dumps({ '[start]': cs, '[grammar]': cg}), file=f)
 
-    cg, cs = F.no_fault_grammar(meta['[grammar]'], meta['[start]'], cfault, 1)
+    cg, cs = F.negate_grammar(meta['[grammar]'], meta['[start]'], cfault, 1)
     cg = F.complete(cg, cs)
     with open('./%s/%s.json' % (results_dir, A.NAME + '_no_fault_g'), 'w+') as f:
         print(json.dumps({ '[start]': cs, '[grammar]': cg}), file=f)

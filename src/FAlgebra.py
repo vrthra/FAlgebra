@@ -1846,6 +1846,11 @@ def negate_grammar_(refined_grammar, refined_start, base_grammar, base_start, lo
         if log: print('gdefined]:', dk, combined_g[dk])
     return combined_g, negate_key(refined_start), refinements
 
+def negate_grammar(refined_grammar, refined_start, base_grammar, base_start, log=False):
+    g,s,r = negate_grammar_(refined_grammar, refined_start, base_grammar, base_start, log=False)
+    return g,s
+
+
 def difference_grammars(grammarA, startA, grammarB, startB):
     if is_base_key(startB):
         return {'<start>': []}, '<start>' # empty
