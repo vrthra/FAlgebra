@@ -136,6 +136,6 @@ def main(gf_fbjson, bug_fn, pred, results_dir='results', max_checks=A.MAX_CHECKS
 
     cg, cs = F.negate_grammar(cg1, cs1, meta['[grammar]'], meta['[start]'], cfault, 1)
     cg = F.complete(cg, cs)
-    with open('./%s/%s.json' % (results_dir, A.NAME + '_no_fault_g'), 'w+') as f:
+    with open('./%s/%s.json' % (results_dir, A.NAME + '_neg_fault_g'), 'w+') as f:
         print(json.dumps({ '[start]': cs, '[grammar]': cg}), file=f)
 
