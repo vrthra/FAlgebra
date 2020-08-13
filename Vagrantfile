@@ -5,7 +5,7 @@ Vagrant.configure("2") do |config|
   config.vm.box = "generic/ubuntu1804"
   config.vm.box_check_update = false
   # config.vm.network "private_network", ip: "192.168.10.50"
-  config.vm.network "forwarded_port", guest: 8888, host: 18888
+  config.vm.network "forwarded_port", guest: 8888, host: 18888, auto_correct: true#, disabled: true
 
   # we do not want a synced folder other than the default.
   # we will be extracting the tarred up falgebra to home.
