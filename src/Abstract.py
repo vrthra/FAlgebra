@@ -674,6 +674,7 @@ def do(command, env=None, shell=False, log=False, **args):
     result = subprocess.Popen(command,
         stdout = subprocess.PIPE,
         stderr = subprocess.STDOUT,
+        preexec_fn = os.setsid
     )
     try: 
         stdout, stderr = result.communicate(timeout=TIMEOUT)
@@ -682,9 +683,20 @@ def do(command, env=None, shell=False, log=False, **args):
         stdout = '' if stdout is None else stdout.decode('utf-8', 'ignore')
         return O(returncode=result.returncode, stdout=stdout, stderr=stderr)
     except subprocess.TimeoutExpired as e:
-        try:
-            result.kill()
-        except PermissionError:
-            pass
-        return O(returncode=255, stdout='TIMEOUT', stderr='')
+        #try:
+        pid = result.pid
+        pgid = os.getpgid(pid)
+        subprocess.call(['stty','sane'])
+        subprocess.call(['tput','rs1'])
+        subprocess.call(['sudo', 'kill', '-TERM', "-%s" % str(pgid)])
+        subprocess.call(['stty','sane'])
+        subprocess.call(['tput','rs1'])
+            #os.killpg(os.getpgid(pid), signal.SIGTERM)
+            #result.kill()
+        #except PermissionError:
+        #    subprocess.call(['stty','sane'])
+        #    subprocess.call(['tput','rs1'])
+        #    print('Permission Error, use SUDO', file=sys.stderr)
+        #    pass
+    return O(returncode=255, stdout='TIMEOUT', stderr='')
 
