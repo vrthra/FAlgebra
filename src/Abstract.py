@@ -678,7 +678,11 @@ def do(command, env=None, shell=False, log=False, **args):
     )
     try: 
         stdout, stderr = result.communicate(timeout=TIMEOUT)
+        subprocess.call(['stty','sane'])
+        subprocess.call(['tput','rs1'])
         result.kill()
+        subprocess.call(['stty','sane'])
+        subprocess.call(['tput','rs1'])
         stderr = '' if stderr is None else stderr.decode('utf-8', 'ignore')
         stdout = '' if stdout is None else stdout.decode('utf-8', 'ignore')
         return O(returncode=result.returncode, stdout=stdout, stderr=stderr)
