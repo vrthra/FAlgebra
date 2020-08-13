@@ -119,10 +119,10 @@ def main(gf_fbjson, bug_fn, pred, results_dir='results', max_checks=A.MAX_CHECKS
         print(json.dumps({'min_s': min_s, 'abs_s': abs_s, 'abs_t': a_mintree}, indent=4), file=f)
 
     cfault = F.find_charecterizing_node(a_mintree)
-    cg, cs = F.atleast_one_fault_grammar(meta['[grammar]'], meta['[start]'], cfault, 1)
-    cg = F.complete(cg, cs)
+    cg1_, cs1 = F.atleast_one_fault_grammar(meta['[grammar]'], meta['[start]'], cfault, 1)
+    cg1 = F.complete(cg1, cs)
     with open('./%s/%s.json' % (results_dir, A.NAME + '_atleast_one_fault_g'), 'w+') as f:
-        print(json.dumps({ '[start]': cs, '[grammar]': cg}), file=f)
+        print(json.dumps({ '[start]': cs1, '[grammar]': cg1}), file=f)
 
     cg, cs = F.atmost_one_fault_grammar(meta['[grammar]'], meta['[start]'], cfault, 1)
     cg = F.complete(cg, cs)
@@ -134,7 +134,7 @@ def main(gf_fbjson, bug_fn, pred, results_dir='results', max_checks=A.MAX_CHECKS
     with open('./%s/%s.json' % (results_dir, A.NAME + '_exactly_one_fault_g'), 'w+') as f:
         print(json.dumps({ '[start]': cs, '[grammar]': cg}), file=f)
 
-    cg, cs = F.negate_grammar(meta['[grammar]'], meta['[start]'], cfault, 1)
+    cg, cs = F.negate_grammar(cg1, cs1, meta['[grammar]'], meta['[start]'], cfault, 1)
     cg = F.complete(cg, cs)
     with open('./%s/%s.json' % (results_dir, A.NAME + '_no_fault_g'), 'w+') as f:
         print(json.dumps({ '[start]': cs, '[grammar]': cg}), file=f)
