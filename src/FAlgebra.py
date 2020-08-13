@@ -1135,7 +1135,7 @@ def negate_a_refined_rule_in_pattern_grammar(refined_rule, fault_key, reachable_
         # is faulty key reachable from the base key? If so, then we need to negate the
         # base key.
         elif normalize(fault_key) in reachable_keys[t]:
-            t_ = refine_base_key(t, negate_refinement(prefix))
+            t_ = refine_base_key(t, negate_prefix(prefix))
             # The idea is to explode the expression that we want to evaluate to DNF, and
             # check whether any of the negated fault keys exist in their own negated reachability grammars.
             refinements.append(t_)
@@ -1226,7 +1226,7 @@ def negated_pattern_grammar(pattern_grammar, pattern_start, fault_key, base_gram
 
 def remove_all_instances_of_fault_from_key(grammar, key, fsym, prefix, reachable):
     ref = refinement(to_fkey_prefix(fsym, prefix, FKey.atleast))
-    nref = negate_refinement(ref)
+    nref = negate_prefix(ref)
     rules = grammar[key]
     my_rules = []
     for rule in grammar[key]:
@@ -1288,7 +1288,7 @@ def no_fault_grammar(grammar, start_symbol, fault_node, f_idx, log=False):
     new_rules = npattern_g[npattern_s] # get the negated pattern rule
 
     combined_grammar[noreaching_fsym] = new_rules
-    start_key = refine_base_key(start_symbol, negate_refinement(refinement(fsym)))
+    start_key = refine_base_key(start_symbol, negate_prefix(refinement(fsym)))
     return combined_grammar, start_key
 
 def remove_all_faults_except_one_from_key(grammar, key, fsym, prefix, reachable):
