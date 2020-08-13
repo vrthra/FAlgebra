@@ -10,6 +10,9 @@ LOG_NAME = None
 MY_PREDICATE = None
 SAVE_EXEC = False
 
+CACHE_FIND = {}
+CACHE_GREP = {}
+
 DOCKER = None
 def docker():
     return DOCKER
@@ -20,12 +23,18 @@ def extract(o):
     return "./" +  s.split('/')[1]
 
 def find():
-    o = A.do(('sudo docker exec -it %s bash -c'% docker()).split(' ') + ['find . | grep %s' % docker()])
-    return extract(o)
+    if DOCKER in CACHE_FIND: return CACHE_FIND[DOCKER]
+    o = A.do(('sudo docker exec -it %s bash -c'% DOCKER).split(' ') + ['find . | grep %s' % DOCKER])
+    if o == 'TIMEOUT': raise Exception('TIMEDOUT tyring to find docker id')
+    CACHE_FIND[DOCKER] = extract(o)
+    return CACHE_FIND[DOCKER]
 
 def grep():
-    o = A.do(('sudo docker exec -it %s bash -c' % docker()).split(' ') + ['find . | grep %s' % docker()])
-    return extract(o)
+    if DOCKER in CACHE_GREP: return CACHE_GREP[DOCKER]
+    o = A.do(('sudo docker exec -it %s bash -c' % DOCKER).split(' ') + ['find . | grep %s' % DOCKER])
+    if o == 'TIMEOUT': raise Exception('TIMEDOUT tyring to find docker id')
+    CACHE_GREP[DOCKER] = extract(o)
+    return CACHE_GREP[DOCKER]
 
 def do(prefix, cmd, src, as_string=False):
     o = None
