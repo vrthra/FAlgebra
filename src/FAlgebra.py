@@ -1074,10 +1074,10 @@ def is_negative_key(key):
     nk = refinement(key)
     return nk[0:4] == 'neg('
 
-def negate_base_key(k, prefix):
+def refine_base_key(k, prefix):
     assert is_nt(k)
     assert is_base_key(k)
-    return '<%s %s>' % (stem(k), negate_prefix(prefix))
+    return '<%s %s>' % (stem(k), prefix)
 
 def negate_key(k):
     assert is_nt(k)
@@ -1109,7 +1109,7 @@ def negate_a_base_rule_wrt_fault_in_pattern_grammar(base_rule, fault_key, reacha
         if not is_nt(token):
             negated_rule.append(token)
         elif normalize(fault_key) in reachable_keys[token]:
-            t = negate_base_key(token, refinement(fault_key))
+            t = refine_base_key(token, negate_prefix(refinement(fault_key)))
             refinements.append(t)
             negated_rule.append(t)
         else:
@@ -1135,7 +1135,7 @@ def negate_a_refined_rule_in_pattern_grammar(refined_rule, fault_key, reachable_
         # is faulty key reachable from the base key? If so, then we need to negate the
         # base key.
         elif normalize(fault_key) in reachable_keys[t]:
-            t_ = negate_base_key(t, prefix)
+            t_ = refine_base_key(t, negate_refinement(prefix))
             # The idea is to explode the expression that we want to evaluate to DNF, and
             # check whether any of the negated fault keys exist in their own negated reachability grammars.
             refinements.append(t_)
@@ -1226,6 +1226,7 @@ def negated_pattern_grammar(pattern_grammar, pattern_start, fault_key, base_gram
 
 def remove_all_instances_of_fault_from_key(grammar, key, fsym, prefix, reachable):
     ref = refinement(to_fkey_prefix(fsym, prefix, FKey.atleast))
+    nref = negate_refinement(ref)
     rules = grammar[key]
     my_rules = []
     for rule in grammar[key]:
@@ -1238,12 +1239,12 @@ def remove_all_instances_of_fault_from_key(grammar, key, fsym, prefix, reachable
             new_rule = []
             for pos, token in enumerate(rule):
                 if pos in positions:
-                    t = negate_base_key(rule[pos], ref)
+                    t = refine_base_key(rule[pos], nref)
                 else:
                     t = token
                 new_rule.append(t)
             my_rules.append(new_rule)
-    return (negate_base_key(key, ref), my_rules)
+    return (refine_base_key(key, nref), my_rules)
 
 def remove_all_instances_of_fault_from_grammar(grammar, fsym, prefix_f, reachable):
     new_grammar = {}
@@ -1287,8 +1288,8 @@ def no_fault_grammar(grammar, start_symbol, fault_node, f_idx, log=False):
     new_rules = npattern_g[npattern_s] # get the negated pattern rule
 
     combined_grammar[noreaching_fsym] = new_rules
-
-    return combined_grammar, negate_base_key(start_symbol, refinement(fsym))
+    start_key = refine_base_key(start_symbol, negate_refinement(refinement(fsym)))
+    return combined_grammar, start_key
 
 def remove_all_faults_except_one_from_key(grammar, key, fsym, prefix, reachable):
     ref = refinement(to_fkey_prefix(fsym, prefix, FKey.atleast)) # negation should be atleast
@@ -1304,7 +1305,7 @@ def remove_all_faults_except_one_from_key(grammar, key, fsym, prefix, reachable)
             for pos in positions:
                 new_rule = [to_fkey_prefix(t, prefix, FKey.atmost)
                             if pos == p else  # at p position, there _may be_ a fault, but not in other places
-                            (negate_base_key(t, ref) if is_nt(t) else t)
+                            (refine_base_key(t, negate_prefix(ref)) if is_nt(t) else t)
                             # change to FKey.exactly to make it exactly
                             for p,t in enumerate(rule)]
                 my_rules.append(new_rule)
@@ -1376,7 +1377,7 @@ def keep_exactly_one_fault_at_key(grammar, key, fsym, prefix, reachable):
             for pos in positions:
                 new_rule = [to_fkey_prefix(t, prefix, FKey.exactly)
                             if pos == p else  # at p position, there _may be_ a fault, but not in other places
-                            (negate_base_key(t, ref) if is_nt(t) else t)
+                            (refine_base_key(t, negate_prefix(ref)) if is_nt(t) else t)
                             # change to FKey.exactly to make it exactly
                             for p,t in enumerate(rule)]
                 my_rules.append(new_rule)
@@ -1534,8 +1535,6 @@ def reconstruct_rules_from_bexpr(key, bexpr, grammar):
     f_key = bexpr.with_key(key)
     if f_key in grammar:
         return grammar, f_key, []
-    elif bexpr.is_neg_sym():
-        return reconstruct_neg_fault(grammar, key, bexpr)
     else:
         new_grammar = grammar
         operator = bexpr.get_operator()
@@ -1547,7 +1546,7 @@ def reconstruct_rules_from_bexpr(key, bexpr, grammar):
             return reconstruct_neg_bexpr(grammar, key, bexpr)
         elif operator == '':
             # probably we have a negation
-            return reconstruct_neg_neg_bexpr(grammar, key, bexpr)
+            return reconstruct_neg_fault(grammar, key, bexpr)
         else:
             assert False
 
@@ -1756,9 +1755,8 @@ def find_base_and_refined_positions(refined_rule):
             assert False
     return base_pos, refined_pos
 
+
 def negate_a_rule(refined_rule, log=False):
-    def negate_nt(t):
-        return unnegate_key(t) if is_negative_key(t) else negate_key(t)
     _base_pos, refined_pos = find_base_and_refined_positions(refined_rule)
     refinements = []
 
@@ -1766,7 +1764,7 @@ def negate_a_rule(refined_rule, log=False):
     # refined to base.
     negated_rules = []
     for pos in refined_pos:
-        new_rule = [negate_nt(t) if pos == i else
+        new_rule = [negate_key(t) if pos == i else
                     (normalize(t) if i in refined_pos else t)
                     for i,t in enumerate(refined_rule)]
         negated_rules.append(new_rule)
@@ -1829,44 +1827,21 @@ def negate_definition(refined_rules, base_rules, log):
     return new_rulesB, new_refs
 
 def negate_grammar_(refined_grammar, refined_start, base_grammar, base_start, log=False):
-    fault_key = refined_start
-    combined_g = copy_grammar(base_grammar)
+    combined_g = {**base_grammar, **refined_grammar}
     refinements = []
     for r_key in refined_grammar:
         if log: print('>>', r_key)
-        combined_g[r_key] = refined_grammar[r_key]
-        if is_base_key(r_key):
-            # the same negation key can occur either from negating a refined
-            # key, or from adding a negation to a base key.
-            # The problem is, refined key may contain more info like pattern
-            # grammar
-            dk = negate_base_key(r_key, refinement(fault_key))
-            if dk in combined_g:
-                # already defined?
-                continue
-            # there is no refinement in this case. Hence,
-            combined_g[dk] = []
-            for rule in base_grammar[r_key]: # base and refined should be the same here.
-                _, _refined_pos  = find_base_and_refined_positions(rule)
-                assert not _refined_pos
-                combined_g[dk].append(rule)
-            continue
-        elif is_negative_key(r_key) and is_base_key(unnegate_key(r_key)):
-            # unk = unnegate_key(r_key)
-            # TODO: check if unk is reachable from refined_grammar, and it exists in refined grammar
-            #assert unk in refined_grammar, unk # if not, make up.
-            continue
+        if is_base_key(r_key): continue # negation of base key is empty set.
         dk = negate_key(r_key)
-        nk = normalize(r_key)
+        if dk in combined_g: continue
         if log: print('gdefine[:', dk)
-        # r_key should actually be faulty_key, but the effect is felt only on the `refs`.
-        rules,refs = negate_definition(refined_grammar[r_key], base_grammar[nk], log)
-        # special case: How do we handle unreachable refined keys that are however defined
-        # with the same rules as unrefined keys? i.e refinement is zero TODO -- verify
-        if rules:
-            combined_g[dk] = rules
-        else: # no refinement
-            combined_g[dk] = refined_grammar[r_key]
+        nk = normalize(r_key)
+        rules,refs = negate_definition(refined_grammar[r_key],
+                                       base_grammar[nk], log)
+        combined_g[dk] = rules
+        if not rules: # no refinement
+            if log: print('No rules for:', dk, 'O:', r_key, 'unreachable?')
+            continue
         refinements.extend(refs)
         if log: print('gdefined]:', dk, combined_g[dk])
     return combined_g, negate_key(refined_start), refinements
