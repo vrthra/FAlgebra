@@ -60,7 +60,7 @@ $(addprefix start_,$(grep_bugs)):
 	sudo docker start $(subst start_,,$@)
 
 $(addprefix stop_,$(grep_bugs)):
-	-@CONT=$(subst start_,,$@); $(BEGIN_CONT) sudo kill -9 $$CPID $(END_CONT)
+	-@CONT=$(subst stop_,,$@); $(BEGIN_CONT) sudo kill -9 $$CPID $(END_CONT)
 	sudo docker stop $(subst stop_,,$@)
 
 $(addprefix start_,$(find_bugs)):
@@ -69,7 +69,7 @@ $(addprefix start_,$(find_bugs)):
 	sudo docker start $(subst start_,,$@)
 
 $(addprefix stop_,$(find_bugs)):
-	-@CONT=$(subst start_,,$@); $(BEGIN_CONT) sudo kill -9 $$CPID $(END_CONT)
+	-@CONT=$(subst stop_,,$@); $(BEGIN_CONT) sudo kill -9 $$CPID $(END_CONT)
 	sudo docker stop $(subst stop_,,$@)
 
 unbuffer= #unbuffer -p
