@@ -36,6 +36,13 @@ recognize_rhino_results_src=$(addsuffix .log,$(addprefix results/recognize_rhino
 recognize_closure_results_src=$(addsuffix .log,$(addprefix results/recognize_closure_,$(closure_bugs)))
 recognize_clojure_results_src=$(addsuffix .log,$(addprefix results/recognize_clojure_,$(clojure_bugs)))
 
+BEGIN_CONT=echo CONT=$$CONT;CID=$$(sudo docker ps -a | grep $$CONT | awk '{print $$1}'); echo CID=$$CID; \
+  if [ ! -z "$$CID" ]; then \
+     CPID=$$(ps -eaf | grep $$CID | grep -v grep | awk '{print $$2}'); echo CPID=$$CPID; \
+     if [ ! -z "$$CPID" ]; then
+
+END_CONT=;fi;fi
+
 
 start_%:; @echo done
 stop_%:; @echo done
@@ -48,17 +55,21 @@ stop_grep: $(addprefix stop_,$(grep_bugs))
 	@echo done.
 
 $(addprefix start_,$(grep_bugs)):
+	-@CONT=$(subst start_,,$@); $(BEGIN_CONT) sudo kill -9 $$CPID $(END_CONT)
 	sudo docker stop $(subst start_,,$@)
 	sudo docker start $(subst start_,,$@)
 
 $(addprefix stop_,$(grep_bugs)):
+	-@CONT=$(subst start_,,$@); $(BEGIN_CONT) sudo kill -9 $$CPID $(END_CONT)
 	sudo docker stop $(subst stop_,,$@)
 
 $(addprefix start_,$(find_bugs)):
+	-@CONT=$(subst start_,,$@); $(BEGIN_CONT) sudo kill -9 $$CPID $(END_CONT)
 	sudo docker stop $(subst start_,,$@)
 	sudo docker start $(subst start_,,$@)
 
 $(addprefix stop_,$(find_bugs)):
+	-@CONT=$(subst start_,,$@); $(BEGIN_CONT) sudo kill -9 $$CPID $(END_CONT)
 	sudo docker stop $(subst stop_,,$@)
 
 unbuffer= #unbuffer -p
@@ -136,7 +147,7 @@ all_closure: recognize_closure
 	tar -cf closure.tar results .db
 	@echo closure done
 
-all: all_lua all_rhino all_clojure all_closure all_find all_grep
+all: all_grep all_find all_lua all_rhino all_clojure all_closure
 	@echo done
 
 dbgbench-init: .dbgbench init-find init-grep
