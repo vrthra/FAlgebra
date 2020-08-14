@@ -218,6 +218,12 @@ box-status:
 	-vagrant global-status | grep falgebra
 	-vagrant box list | grep falgebra
 
+box-remove1:
+	cd artifact; vagrant destroy
+
+box-remove2:
+	cd vtest; vagrant destroy
+
 box-remove:
 	-vagrant destroy $$(vagrant global-status | grep falgebra | sed -e 's# .*##g')
 	vagrant box remove falgebra
