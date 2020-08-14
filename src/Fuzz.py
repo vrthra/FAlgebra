@@ -134,7 +134,7 @@ def main(gf_fbjson, bug_fn, pred, results_dir='fuzzing', max_checks=A.MAX_CHECKS
     print('Exactly Valid:', len([r for r in  results if r != A.PRes.invalid]))
     print('Exactly Success:', len([r for r in  results if r == A.PRes.success]))
 
-    results = fuzz_it('./results/%s_no_fault_g.json' % os.path.basename(bug_fn))
+    results = fuzz_it('./results/%s_neg_fault_g.json' % os.path.basename(bug_fn))
     print('NoFault Total:', len(results))
     print('NoFault Valid:', len([r for r in  results if r != A.PRes.invalid]))
     print('NoFault Success:', len([r for r in  results if r == A.PRes.success]))
