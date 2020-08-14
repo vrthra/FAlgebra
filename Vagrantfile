@@ -18,7 +18,7 @@ Vagrant.configure("2") do |config|
 
   config.vm.provision "shell", inline: <<-SHELL
     apt-get update
-    apt-get -y install openjdk-11-jre-headless make docker.io graphviz python3-venv python3-pip remake jq
+    apt-get -y install openjdk-11-jre-headless make docker.io graphviz python3-venv python3-pip remake jq kakoune
     pip3 install wheel
     pip3 install graphviz
     pip3 install jupyter
