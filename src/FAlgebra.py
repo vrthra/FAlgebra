@@ -1697,7 +1697,7 @@ def merge_similar_rules_positions(rules):
             merged_rules.append(nrule)
 
     if not found:
-        merged_rules += [nrule]
+        merged_rules += [nrule] # TODO: should be cur_rule
     return merged_rules, refs
 
 def merge_disj_rules(g1):
