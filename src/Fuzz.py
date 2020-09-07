@@ -45,7 +45,7 @@ def fuzz_grammar(mgrammar):
     gf = A.LimitFuzzer(grammar)
     results = []
     for i in range(MAX_LIMIT):
-        e = gf.fuzz(key=start, max_depth=1)
+        e = gf.fuzz(key=start)
         results.append(e)
     gf.reset_cost()
     return list(set(results))
@@ -87,7 +87,7 @@ def fuzz_it(fname):
 
     # fuzz_vals = fuzz_tree(meta, abs_t)
     fuzz_vals = fuzz_grammar(bug_grammar)
-    FUZZ_LIMIT = 10000
+    FUZZ_LIMIT = 100
     if len(fuzz_vals) > FUZZ_LIMIT:
         fuzz_vals = random.sample(fuzz_vals, FUZZ_LIMIT)
     print(len(fuzz_vals))
