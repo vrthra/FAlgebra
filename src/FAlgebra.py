@@ -305,6 +305,14 @@ def node_to_rule(node):
 def node_to_normalized_rule(node):
     return rule_to_normalized_rule(node_to_rule(node))
 
+def get_rulesets(rules):
+    rulesets = {}
+    for rule in rules:
+        nr = tuple(rule_to_normalized_rule(rule))
+        if nr not in rulesets: rulesets[nr] = []
+        rulesets[nr].append(rule)
+    return rulesets
+
 def replace_tree(node, path, newnode):
     if not path:
         return newnode
@@ -1609,23 +1617,35 @@ def complete(grammar, start, log=False):
 
 import itertools as I
 
+def conjoin_ruleset(rulesetA, rulesetB):
+    rules = []
+    refinements = []
+    for ruleA,ruleB in I.product(rulesetA, rulesetB):
+        AandB_rule = []
+        for t1,t2 in zip(ruleA, ruleB):
+            if not is_nt(t1):
+                AandB_rule.append(t1)
+            elif is_base_key(t1) and is_base_key(t2):
+                AandB_rule.append(t1)
+            else:
+                k = conj(t1, t2, simplify=True)
+                refinements.append(k)
+                AandB_rule.append(k)
+        rules.append(AandB_rule)
+    return rules, refinements
+
 def and_rules(rulesA, rulesB):
     AandB_rules = []
     refinements = []
-    for ruleA in rulesA:
-        for ruleB in rulesB:
-            if not normalized_rule_match(ruleA, ruleB): continue
-            AandB_rule = []
-            for t1,t2 in zip(ruleA, ruleB):
-                if not is_nt(t1):
-                    AandB_rule.append(t1)
-                elif is_base_key(t1) and is_base_key(t2):
-                    AandB_rule.append(t1)
-                else:
-                    k = conj(t1, t2, simplify=True)
-                    refinements.append(k)
-                    AandB_rule.append(k)
-            AandB_rules.append(AandB_rule)
+    # key is the rule pattern
+    rulesetsA = get_rulesets(rulesA)
+    rulesetsB = get_rulesets(rulesB)
+    # drop any rules that are not there in both.
+    keys = set(rulesetsA.keys()) & set(rulesetsB.keys())
+    for k in keys:
+        new_rules, refs = conjoin_ruleset(rulesetsA[k], rulesetsB[k])
+        refinements.extend(refs)
+        AandB_rules.extend(new_rules)
     return AandB_rules, refinements
 
 def and_grammars_(g1, s1, g2, s2):
@@ -1697,7 +1717,7 @@ def merge_similar_rules_positions(rules):
             merged_rules.append(nrule)
 
     if not found:
-        merged_rules += [nrule] # TODO: should be cur_rule
+        merged_rules += [cur_rule]
     return merged_rules, refs
 
 def merge_disj_rules(g1):
@@ -1795,14 +1815,18 @@ def multi_and_rules(rules):
     assert len(r1) == 1
     return r1[0], refinements
 
+
 def negate_definition(refined_rules, base_rules, log):
     new_rulesB = []
     new_refs = []
+    refined_rulesets = get_rulesets(refined_rules)
     for base_rule in base_rules:
-        # What happens when there are multiple normalized rules? Then
-        # we have to consider each such rule seprate.
-        refined_rules_p = rules_normalized_match_to_rule(refined_rules, base_rule)
+        # identify refined rules that match the base rule template
+        refined_rules_p = refined_rulesets.get(tuple(base_rule), [])
         if not refined_rules_p:
+            # if there are no matching refined rules, that means this base rule
+            # was never used in the original grammar, hence it can be used in
+            # negated grammar.
             new_rulesB.append(base_rule)
             continue
 
@@ -1810,7 +1834,7 @@ def negate_definition(refined_rules, base_rules, log):
         new_refs.extend(refs1)
         if log: print('negate_ruleset:', len(neg_rulesB))
 
-        # TODO: Now, the idea is to do a `product` of each item in
+        # Now, the idea is to do a `product` of each item in
         # neg_rulesB with every other item. Each item has multiple
         # rules in them, where one refinement is negated. So combining
         # that with others of similar kind using `and` should produce
@@ -1823,7 +1847,6 @@ def negate_definition(refined_rules, base_rules, log):
             new_rulesB.append(r)
             new_refs.extend(ref)
 
-    # now, include the unmatching base rules, and append.
     return new_rulesB, new_refs
 
 def negate_grammar_(refined_grammar, refined_start, base_grammar, base_start, log=False):
